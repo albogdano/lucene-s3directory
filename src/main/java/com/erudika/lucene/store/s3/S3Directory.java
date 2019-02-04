@@ -40,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.lucene.index.IndexWriter;
-import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 
@@ -64,8 +63,7 @@ public class S3Directory extends Directory {
 
 	private String bucket;
 
-	private final S3Client s3 = S3Client.builder().
-			credentialsProvider(ProfileCredentialsProvider.builder().build()).build();
+	private final S3Client s3 = S3Client.create();
 
 	/**
 	 * Creates a new S3 directory.
@@ -108,9 +106,11 @@ public class S3Directory extends Directory {
 	}
 
 	/**
-	 * *********************************************************************************************
-	 * CUSTOM METHODS *********************************************************************************************
+	 * ********************************************************************************************
+	 * CUSTOM METHODS
+	 * ********************************************************************************************
 	 */
+
 	/**
 	 * Returns <code>true</code> if the S3 bucket exists.
 	 *
