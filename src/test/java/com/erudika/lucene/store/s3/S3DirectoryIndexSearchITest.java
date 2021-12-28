@@ -1,5 +1,6 @@
 package com.erudika.lucene.store.s3;
 
+import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET2;
 import java.io.IOException;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -25,7 +26,7 @@ public class S3DirectoryIndexSearchITest extends AbstractS3DirectoryITest {
 
 	@Before
 	public void setUp() throws Exception {
-        directory = new S3Directory("TEST-s3lucene-dir2");
+        directory = new S3Directory(TEST_BUCKET2);
         ((S3Directory) directory).create();
 //		directory = FSDirectory.open(FileSystems.getDefault().getPath("target/index"));
 

@@ -123,10 +123,8 @@ public class FetchOnBufferReadS3IndexInput extends S3BufferedIndexInput {
 			position = curPos;
 		}
 		res.skip(position);
-		if (length > 0) {
-			res.read(b, offset, length);
-			position += length;
-		}
+		res.read(b, offset, length);
+		position += length;
 	}
 
 	@Override

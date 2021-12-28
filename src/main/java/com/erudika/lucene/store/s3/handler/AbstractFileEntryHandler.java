@@ -103,7 +103,7 @@ public abstract class AbstractFileEntryHandler implements FileEntryHandler {
 			if (logger.isDebugEnabled()) {
 				logger.info("renameFile({}, {})", from, to);
 			}
-			s3Directory.getS3().copyObject(b -> b.bucket(bucket).copySource(bucket.concat("/").concat(from)).key(to));
+			s3Directory.getS3().copyObject(b -> b.sourceBucket(bucket).sourceKey(from).destinationBucket(bucket).destinationKey(to));
 			s3Directory.getFileSizes().put(to, s3Directory.getFileSizes().remove(from));
 			deleteFile(from);
 		} catch (Exception e) {

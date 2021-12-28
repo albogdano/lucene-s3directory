@@ -15,6 +15,7 @@
  */
 package com.erudika.lucene.store.s3;
 
+import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.util.Collection;
@@ -23,8 +24,8 @@ import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.MMapDirectory;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -32,26 +33,26 @@ import org.junit.Test;
  */
 public class S3DirectoryBenchmarkITest extends AbstractS3DirectoryITest {
 
-	private Directory fsDirectory;
-	private Directory ramDirectory;
-	private Directory s3Directory;
+	private static Directory fsDirectory;
+	private static Directory ramDirectory;
+	private static Directory s3Directory;
 
 	private final Collection<String> docs = loadDocuments(3000, 5);
-	private final OpenMode openMode = OpenMode.CREATE;
+	private final OpenMode openMode = OpenMode.CREATE_OR_APPEND;
 	private final boolean useCompoundFile = false;
 
-	@Before
-	public void setUp() throws Exception {
-		s3Directory = new S3Directory("test-s3lucene-dir");
+	@BeforeClass
+	public static void setUp() throws Exception {
+		s3Directory = new S3Directory(TEST_BUCKET);
+		((S3Directory) s3Directory).create();
 		ramDirectory = new MMapDirectory(FileSystems.getDefault().getPath("target/index"));
 		fsDirectory = FSDirectory.open(FileSystems.getDefault().getPath("target/index"));
-
-		((S3Directory) s3Directory).create();
 	}
 
-	@After
-	public void tearDown() {
-		((S3Directory) s3Directory).emptyBucket();
+	@AfterClass
+	public static void tearDown() throws Exception {
+		s3Directory.close();
+		((S3Directory) s3Directory).delete();
 	}
 
 	@Test
