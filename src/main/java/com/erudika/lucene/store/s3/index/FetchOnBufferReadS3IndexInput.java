@@ -15,16 +15,16 @@
  */
 package com.erudika.lucene.store.s3.index;
 
-import java.io.EOFException;
 import java.io.IOException;
 
-import org.apache.lucene.store.BufferedIndexInput;
 import org.apache.lucene.store.IndexInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
+import java.nio.ByteBuffer;
+import org.apache.lucene.store.BufferedIndexInput;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
@@ -186,13 +186,15 @@ public class FetchOnBufferReadS3IndexInput extends S3BufferedIndexInput {
 		}
 
 		@Override
-		protected void readInternal(final byte[] b, final int offset, final int len) throws IOException {
-			final long start = getFilePointer();
-			if (start + len > length) {
-				throw new EOFException("read past EOF: " + this);
-			}
-			base.seek(fileOffset + start);
-			base.readBytes(b, offset, len, false);
+		protected void readInternal(ByteBuffer bb) throws IOException {
+//			final long start = getFilePointer();
+//			if (start + len > length) {
+//				throw new EOFException("read past EOF: " + this);
+//			}
+//			System.out.println(name);
+//			base.seek(fileOffset + start);
+//			base.readBytes(bb.array(), (int) fileOffset, (int) length, false);
+			throw new UnsupportedOperationException("THE PROBLEM IS HERE! - IF ANYONE CAN FIX THIS - PRs ARE OPEN.");
 		}
 
 		@Override

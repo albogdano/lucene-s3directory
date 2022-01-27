@@ -36,8 +36,10 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
 import com.erudika.lucene.store.s3.lock.S3Lock;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.lucene.index.IndexWriter;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -372,5 +374,10 @@ public class S3Directory extends Directory {
 
 	public ConcurrentHashMap<String, Long> getFileSizes() {
 		return fileSizes;
+	}
+
+	@Override
+	public Set<String> getPendingDeletions() throws IOException {
+		return Collections.emptySet();
 	}
 }

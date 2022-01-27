@@ -51,7 +51,6 @@ public class LuceneFileNames {
 	static {
 		STATIC_FILES = new HashSet<String>();
 		STATIC_FILES.add(IndexFileNames.SEGMENTS);
-		STATIC_FILES.add(IndexFileNames.OLD_SEGMENTS_GEN);
 		STATIC_FILES.add(IndexFileNames.PENDING_SEGMENTS);
 		STATIC_FILES.add("clearcache");
 		STATIC_FILES.add("spellcheck.version");
@@ -70,8 +69,7 @@ public class LuceneFileNames {
 	 */
 	public static boolean isSegmentsFile(final String name) {
 		logger.debug("LuceneFileNames.isSegmentsFile({})", name);
-		return name.equals(IndexFileNames.SEGMENTS) || name.equals(IndexFileNames.OLD_SEGMENTS_GEN)
-				|| name.equals(IndexFileNames.PENDING_SEGMENTS);
+		return name.equals(IndexFileNames.SEGMENTS) || name.equals(IndexFileNames.PENDING_SEGMENTS);
 	}
 
 }
