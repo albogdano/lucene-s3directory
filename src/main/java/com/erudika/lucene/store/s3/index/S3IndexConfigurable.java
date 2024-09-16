@@ -15,10 +15,10 @@
  */
 package com.erudika.lucene.store.s3.index;
 
-import java.io.IOException;
-
 import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
+
+import java.io.IOException;
 
 /**
  * An additional interface that each implementation of <code>IndexInput</code> and <code>IndexOutput</code> must
@@ -35,7 +35,7 @@ public interface S3IndexConfigurable {
 	 * @param name The name of the file entry
 	 * @param s3Directory The S3 directory instance
 	 * @param settings The relevant file entry settings
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void configure(String name, S3Directory s3Directory, S3FileEntrySettings settings) throws IOException;
 }

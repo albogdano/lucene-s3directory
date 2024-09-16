@@ -15,10 +15,10 @@
  */
 package com.erudika.lucene.store.s3.index;
 
-import java.io.IOException;
-
 import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
+
+import java.io.IOException;
 
 /**
  * A simple base class that performs index input memory based buffering. The buffer size can be configured under the

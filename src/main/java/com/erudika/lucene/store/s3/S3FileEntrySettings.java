@@ -16,21 +16,22 @@
 package com.erudika.lucene.store.s3;
 
 import com.erudika.lucene.store.s3.handler.ActualDeleteFileEntryHandler;
-import java.util.Properties;
-
 import com.erudika.lucene.store.s3.index.FetchOnBufferReadS3IndexInput;
 import com.erudika.lucene.store.s3.index.RAMS3IndexOutput;
+import com.erudika.lucene.store.s3.index.S3IndexInput;
+
+import java.util.Properties;
 
 /**
  * A file entry level settings. An abstract view of any type of setting that cab be used by the actual file entry
  * handler that uses it.
  * <p/>
  * Holds the {@link #FILE_ENTRY_HANDLER_TYPE} that defines the type of the
- * {@link org.apache.lucene.store.s3.handler.FileEntryHandler} that will be created and initialized with the settings.
+ * {@link com.erudika.lucene.store.s3.handler.FileEntryHandler} that will be created and initialized with the settings.
  * <p/>
  * Default values for a new instanciated instnce are:
- * {@link org.apache.lucene.store.s3.handler.MarkDeleteFileEntryHandler} for the {@link #FILE_ENTRY_HANDLER_TYPE}
- * setting, {@link org.apache.lucene.store.s3.index.FetchOnBufferReadS3IndexInput} for the
+ * {@link com.erudika.lucene.store.s3.handler.MarkDeleteFileEntryHandler} for the {@link #FILE_ENTRY_HANDLER_TYPE}
+ * setting, {@link FetchOnBufferReadS3IndexInput} for the
  * {@link #INDEX_INPUT_TYPE_SETTING} setting, and {@link org.apache.lucene.store.s3.index.RAMAndFileS3IndexOutput} for
  * the {@link #INDEX_OUTPUT_TYPE_SETTING} setting.
  *
@@ -62,7 +63,9 @@ public class S3FileEntrySettings {
 	 */
 	public S3FileEntrySettings() {
 		setClassSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, ActualDeleteFileEntryHandler.class);
-		setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnBufferReadS3IndexInput.class);
+		//TODO: Fix this
+//		setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnBufferReadS3IndexInput.class);
+		setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, S3IndexInput.class);
 		setClassSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING, RAMS3IndexOutput.class);
 	}
 

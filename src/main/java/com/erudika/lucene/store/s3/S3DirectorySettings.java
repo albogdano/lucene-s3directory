@@ -15,28 +15,30 @@
  */
 package com.erudika.lucene.store.s3;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import com.erudika.lucene.store.s3.handler.ActualDeleteFileEntryHandler;
 import com.erudika.lucene.store.s3.handler.NoOpFileEntryHandler;
-import com.erudika.lucene.store.s3.index.FetchOnOpenS3IndexInput;
 import com.erudika.lucene.store.s3.index.RAMS3IndexOutput;
+import com.erudika.lucene.store.s3.index.S3IndexInput;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * General directory level settings.
  * <p />
- * The settings also holds {@link S3FileEntrySettings}, that can be registered with the directory settings. Note, that
+ * The settings also holds {@link com.erudika.lucene.store.s3.S3FileEntrySettings}, that can be registered with the directory settings. Note, that
  * when registering them, they are registered under both the complete name and the 3 charecters name suffix.
  * <p />
- * When creating the settings, it already holds sensible settings, they are: The default {@link S3FileEntrySettings}
+ * When creating the settings, it already holds sensible settings, they are: The default {@link com.erudika.lucene.store.s3.S3FileEntrySettings}
  * uses the file entry settings defaults. The "deletable", ""deleteable.new", and "deletable.new" uses the
- * {@link org.apache.lucene.store.s3.handler.NoOpFileEntryHandler}. The "segments" and "segments.new" uses the null {@link org.apache.lucene.store.s3.handler.ActualDeleteFileEntryHandler},
- * {@link org.apache.lucene.store.s3.index.FetchOnOpenS3IndexInput}, and
- * {@link org.apache.lucene.store.s3.index.RAMS3IndexOutput}. The file suffix "fnm" uses the
- * {@link org.apache.lucene.store.s3.index.FetchOnOpenS3IndexInput}, and
- * {@link org.apache.lucene.store.s3.index.RAMS3IndexOutput}. The file suffix "del" and "tmp" uses the
- * {@link org.apache.lucene.store.s3.handler.ActualDeleteFileEntryHandler}.
+ * {@link com.erudika.lucene.store.s3.handler.NoOpFileEntryHandler}. The "segments" and "segments.new" uses the null {@link com.erudika.lucene.store.s3.handler.ActualDeleteFileEntryHandler},
+ * {@link com.erudika.lucene.store.s3.index.FetchOnOpenS3IndexInput}, and
+ * {@link com.erudika.lucene.store.s3.index.RAMS3IndexOutput}. The file suffix "fnm" uses the
+ * {@link com.erudika.lucene.store.s3.index.FetchOnOpenS3IndexInput}, and
+ * {@link com.erudika.lucene.store.s3.index.RAMS3IndexOutput}. The file suffix "del" and "tmp" uses the
+ * {@link com.erudika.lucene.store.s3.handler.ActualDeleteFileEntryHandler}.
  *
  * @author kimchy
  */
@@ -46,72 +48,77 @@ public class S3DirectorySettings {
 	 * The default file entry settings name that are registered under.
 	 */
 	public static String DEFAULT_FILE_ENTRY = "__default__";
+	private static final Logger logger = LoggerFactory.getLogger(S3DirectorySettings.class);
 
 	/**
 	 * A simple constant having the millisecond value of an hour.
 	 */
 	public static final long HOUR = 60 * 60 * 1000;
 
-	private final HashMap<String, S3FileEntrySettings> fileEntrySettings = new HashMap<String, S3FileEntrySettings>();
+	private final HashMap<String, com.erudika.lucene.store.s3.S3FileEntrySettings> fileEntrySettings = new HashMap<String, com.erudika.lucene.store.s3.S3FileEntrySettings>();
 
 	/**
 	 * Creates a new instance of the S3 directory settings with it's default values initialized.
 	 */
 	public S3DirectorySettings() {
-		final S3FileEntrySettings defaultSettings = new S3FileEntrySettings();
+		final com.erudika.lucene.store.s3.S3FileEntrySettings defaultSettings = new com.erudika.lucene.store.s3.S3FileEntrySettings();
 		fileEntrySettings.put(DEFAULT_FILE_ENTRY, defaultSettings);
 
-		final S3FileEntrySettings deletableSettings = new S3FileEntrySettings();
-		deletableSettings.setClassSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, NoOpFileEntryHandler.class);
+		final com.erudika.lucene.store.s3.S3FileEntrySettings deletableSettings = new com.erudika.lucene.store.s3.S3FileEntrySettings();
+		deletableSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, NoOpFileEntryHandler.class);
 		fileEntrySettings.put("deletable", deletableSettings);
 		fileEntrySettings.put("deleteable.new", deletableSettings);
 		// in case lucene fix the spelling mistake
 		fileEntrySettings.put("deletable.new", deletableSettings);
 
-		final S3FileEntrySettings segmentsSettings = new S3FileEntrySettings();
-		segmentsSettings.setClassSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, ActualDeleteFileEntryHandler.class);
-		segmentsSettings.setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnOpenS3IndexInput.class);
-		segmentsSettings.setClassSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING, RAMS3IndexOutput.class);
+		final com.erudika.lucene.store.s3.S3FileEntrySettings segmentsSettings = new com.erudika.lucene.store.s3.S3FileEntrySettings();
+		segmentsSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, ActualDeleteFileEntryHandler.class);
+		//todo
+//		segmentsSettings.setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnOpenS3IndexInput.class);
+		segmentsSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, S3IndexInput.class);
+		segmentsSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING, RAMS3IndexOutput.class);
 		fileEntrySettings.put("segments", segmentsSettings);
 		fileEntrySettings.put("segments.new", segmentsSettings);
+		fileEntrySettings.put("doc", segmentsSettings);
 
-		final S3FileEntrySettings dotDelSettings = new S3FileEntrySettings();
-		dotDelSettings.setClassSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE,
+		final com.erudika.lucene.store.s3.S3FileEntrySettings dotDelSettings = new com.erudika.lucene.store.s3.S3FileEntrySettings();
+		dotDelSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE,
 				ActualDeleteFileEntryHandler.class);
 		fileEntrySettings.put("del", dotDelSettings);
 
-		final S3FileEntrySettings tmpSettings = new S3FileEntrySettings();
-		tmpSettings.setClassSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, ActualDeleteFileEntryHandler.class);
+		final com.erudika.lucene.store.s3.S3FileEntrySettings tmpSettings = new com.erudika.lucene.store.s3.S3FileEntrySettings();
+		tmpSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, ActualDeleteFileEntryHandler.class);
 		fileEntrySettings.put("tmp", dotDelSettings);
 
-		final S3FileEntrySettings fnmSettings = new S3FileEntrySettings();
-		fnmSettings.setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnOpenS3IndexInput.class);
-		fnmSettings.setClassSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING, RAMS3IndexOutput.class);
+		final com.erudika.lucene.store.s3.S3FileEntrySettings fnmSettings = new com.erudika.lucene.store.s3.S3FileEntrySettings();
+//		fnmSettings.setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnOpenS3IndexInput.class);
+		fnmSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, S3IndexInput.class);
+		fnmSettings.setClassSetting(com.erudika.lucene.store.s3.S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING, RAMS3IndexOutput.class);
 		fileEntrySettings.put("fnm", fnmSettings);
 	}
 
 	/**
-	 * Registers a {@link S3FileEntrySettings} against the given name. The name can be the full name of the file, or
+	 * Registers a {@link com.erudika.lucene.store.s3.S3FileEntrySettings} against the given name. The name can be the full name of the file, or
 	 * it's 3 charecters suffix.
 	 */
-	public void registerFileEntrySettings(final String name, final S3FileEntrySettings fileEntrySettings) {
+	public void registerFileEntrySettings(final String name, final com.erudika.lucene.store.s3.S3FileEntrySettings fileEntrySettings) {
 		this.fileEntrySettings.put(name, fileEntrySettings);
 	}
 
 	/**
 	 * Returns the file entries map. Please don't change it during runtime.
 	 */
-	public Map<String, S3FileEntrySettings> getFileEntrySettings() {
+	public Map<String, com.erudika.lucene.store.s3.S3FileEntrySettings> getFileEntrySettings() {
 		return fileEntrySettings;
 	}
 
 	/**
 	 * Returns the file entries according to the name. If a direct match is found, it's registered
-	 * {@link S3FileEntrySettings} is returned. If one is registered against the last 3 charecters, then it is returned.
+	 * {@link com.erudika.lucene.store.s3.S3FileEntrySettings} is returned. If one is registered against the last 3 charecters, then it is returned.
 	 * If none is found, the default file entry handler is returned.
 	 */
-	public S3FileEntrySettings getFileEntrySettings(final String name) {
-		final S3FileEntrySettings settings = getFileEntrySettingsWithoutDefault(name);
+	public com.erudika.lucene.store.s3.S3FileEntrySettings getFileEntrySettings(final String name) {
+		final com.erudika.lucene.store.s3.S3FileEntrySettings settings = getFileEntrySettingsWithoutDefault(name);
 		if (settings != null) {
 			return settings;
 		}
@@ -122,8 +129,8 @@ public class S3DirectorySettings {
 	 * Same as {@link #getFileEntrySettings(String)}, only returns <code>null</code> if no match is found (instead of
 	 * the default file entry handler settings).
 	 */
-	public S3FileEntrySettings getFileEntrySettingsWithoutDefault(final String name) {
-		final S3FileEntrySettings settings = fileEntrySettings.get(name.substring(name.length() - 3));
+	public com.erudika.lucene.store.s3.S3FileEntrySettings getFileEntrySettingsWithoutDefault(final String name) {
+		final com.erudika.lucene.store.s3.S3FileEntrySettings settings = fileEntrySettings.get(name.substring(name.length() - 3));
 		if (settings != null) {
 			return settings;
 		}
@@ -134,6 +141,7 @@ public class S3DirectorySettings {
 	 * Returns the default file entry handler settings.
 	 */
 	public S3FileEntrySettings getDefaultFileEntrySettings() {
+		logger.info("Returning default file entry settings");
 		return fileEntrySettings.get(DEFAULT_FILE_ENTRY);
 	}
 }

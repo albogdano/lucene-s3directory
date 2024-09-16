@@ -15,16 +15,15 @@
  */
 package com.erudika.lucene.store.s3.index;
 
-import java.io.IOException;
-
+import com.erudika.lucene.store.s3.S3Directory;
+import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import org.apache.lucene.store.IndexInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.erudika.lucene.store.s3.S3Directory;
-import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+
+import java.io.IOException;
 
 /**
  * An <code>IndexInput</code> implementation that will read all the relevant data from the S3 when created, and will

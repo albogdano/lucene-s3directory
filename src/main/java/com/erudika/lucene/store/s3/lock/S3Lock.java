@@ -15,9 +15,9 @@
  */
 package com.erudika.lucene.store.s3.lock;
 
-import java.io.IOException;
-
 import com.erudika.lucene.store.s3.S3Directory;
+
+import java.io.IOException;
 
 /**
  * An extension insterface for Lucene <code>Lock</code> class.
@@ -31,12 +31,12 @@ public interface S3Lock {
 	 *
 	 * @param s3Directory The directory using the lock
 	 * @param name The name of the lock
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void configure(S3Directory s3Directory, String name) throws IOException;
 
 	/**
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void obtain() throws IOException;
 }

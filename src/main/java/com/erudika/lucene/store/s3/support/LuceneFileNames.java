@@ -31,11 +31,12 @@
  */
 package com.erudika.lucene.store.s3.support;
 
-import java.util.HashSet;
-import java.util.Set;
 import org.apache.lucene.index.IndexFileNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * A set of utility methods for index file names.

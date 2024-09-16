@@ -15,14 +15,12 @@
  */
 package com.erudika.lucene.store.s3.handler;
 
-import java.io.IOException;
-
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-
 import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import com.erudika.lucene.store.s3.S3StoreException;
+import com.erudika.lucene.store.s3.index.S3IndexConfigurable;
+import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.store.IndexOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -30,7 +28,8 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import com.erudika.lucene.store.s3.index.S3IndexConfigurable;
+
+import java.io.IOException;
 
 /**
  * A base file entry handler that supports most of the file entry base operations.
@@ -129,6 +128,7 @@ public abstract class AbstractFileEntryHandler implements FileEntryHandler {
 	@Override
 	public IndexInput openInput(final String name) throws IOException {
 		IndexInput indexInput;
+        logger.info("openInput called with : {}", name);
 		final S3FileEntrySettings settings = s3Directory.getSettings().getFileEntrySettings(name);
 		try {
 			final Class<?> inputClass = settings.getSettingAsClass(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, null);
@@ -144,11 +144,12 @@ public abstract class AbstractFileEntryHandler implements FileEntryHandler {
 	@Override
 	public IndexOutput createOutput(final String name) throws IOException {
 		IndexOutput indexOutput;
+		logger.info("createOutput called with : "+name);
 		final S3FileEntrySettings settings = s3Directory.getSettings().getFileEntrySettings(name);
 		try {
 			final Class<?> inputClass = settings.getSettingAsClass(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING,
 					null);
-			indexOutput = (IndexOutput) inputClass.getConstructor().newInstance();
+			indexOutput = (IndexOutput) inputClass.getConstructor(String.class).newInstance(name);
 		} catch (final Exception e) {
 			throw new S3StoreException("Failed to create indexOutput instance ["
 					+ settings.getSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING) + "]", e);
