@@ -15,14 +15,13 @@
  */
 package com.erudika.lucene.store.s3.handler;
 
-import java.io.IOException;
-
+import com.erudika.lucene.store.s3.S3Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.erudika.lucene.store.s3.S3Directory;
+import java.io.IOException;
 
 /**
  * A No Operation file entry handler. Performs no actual dirty operations, and returns empty data for read operations.

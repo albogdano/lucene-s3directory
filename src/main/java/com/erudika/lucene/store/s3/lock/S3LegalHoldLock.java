@@ -15,17 +15,20 @@
  */
 package com.erudika.lucene.store.s3.lock;
 
-import java.io.IOException;
-
+import com.erudika.lucene.store.s3.S3Directory;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Lock;
-import com.erudika.lucene.store.s3.S3Directory;
 import org.apache.lucene.store.LockObtainFailedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.services.s3.model.ObjectLockLegalHold;
 import software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus;
+import software.amazon.awssdk.services.s3.model.PutObjectLegalHoldRequest;
+
+import java.io.IOException;
+
 import static software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus.OFF;
 import static software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus.ON;
 
@@ -103,8 +106,13 @@ public class S3LegalHoldLock extends Lock implements S3Lock {
 	}
 
 	private void putObjectLegalHold(ObjectLockLegalHoldStatus status) {
-		s3Directory.getS3().putObjectLegalHold(b -> b.bucket(s3Directory.getBucket()).
-				key(name).legalHold(l -> l.status(status)));
+
+		s3Directory.getS3().putObjectLegalHold(PutObjectLegalHoldRequest
+				.builder()
+						.bucket(s3Directory.getBucket())
+						.key(name)
+						.legalHold(ObjectLockLegalHold.builder().status(status).build())
+				.build());
 	}
 
 	@Override

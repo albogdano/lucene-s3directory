@@ -61,9 +61,9 @@ I tried to do my best to optimize the code but I'm sure it can be optimized furt
 
 `S3DirectoryBenchmarkITest.java`:
 ```
-RAMDirectory Time: 312 ms
-FSDirectory Time : 136 ms
-S3Directory Time : 3846 ms
+RAMDirectory Time: 225 ms
+FSDirectory Time : 62 ms
+S3Directory Time : 16859 ms
 ```
 
 ## License

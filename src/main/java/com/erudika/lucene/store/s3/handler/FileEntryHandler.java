@@ -15,12 +15,11 @@
  */
 package com.erudika.lucene.store.s3.handler;
 
-import java.io.IOException;
-
+import com.erudika.lucene.store.s3.S3Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 
-import com.erudika.lucene.store.s3.S3Directory;
+import java.io.IOException;
 
 /**
  * A file entry handler acts as a delegate to the {@link S3Directory} for all "file" level operations. Allows the
@@ -28,8 +27,8 @@ import com.erudika.lucene.store.s3.S3Directory;
  * several different file entries for different files or files groups.
  *
  * @author kimchy
- * @see org.apache.lucene.store.s3.S3DirectorySettings#registerFileEntrySettings(String,
- * org.apache.lucene.store.s3.S3FileEntrySettings)
+ * @see com.erudika.lucene.store.s3.S3DirectorySettings#registerFileEntrySettings(String,
+ * com.erudika.lucene.store.s3.S3FileEntrySettings)
  */
 public interface FileEntryHandler {
 
@@ -43,7 +42,7 @@ public interface FileEntryHandler {
 	 *
 	 * @param name The name of the file
 	 * @return <code>true</code> of the file exists, <code>false</code> if it does not.
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	boolean fileExists(final String name) throws IOException;
 
@@ -52,7 +51,7 @@ public interface FileEntryHandler {
 	 *
 	 * @param name The name of the file
 	 * @return The last modified date in millis.
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	long fileModified(final String name) throws IOException;
 
@@ -60,7 +59,7 @@ public interface FileEntryHandler {
 	 * Updates the last modified date of the file to the current time.
 	 *
 	 * @param name The name of the file
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void touchFile(final String name) throws IOException;
 
@@ -68,7 +67,7 @@ public interface FileEntryHandler {
 	 * Deletes the given file name.
 	 *
 	 * @param name The name of the file to delete
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void deleteFile(final String name) throws IOException;
 
@@ -77,7 +76,7 @@ public interface FileEntryHandler {
 	 *
 	 * @param from The name to rename from
 	 * @param to The name to rename to
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void renameFile(final String from, final String to) throws IOException;
 
@@ -86,7 +85,7 @@ public interface FileEntryHandler {
 	 *
 	 * @param name The name of the file
 	 * @return The length of the file (in bytes)
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	long fileLength(final String name) throws IOException;
 
@@ -95,7 +94,7 @@ public interface FileEntryHandler {
 	 *
 	 * @param name The name of the file
 	 * @return An <code>IndexInput</code> in order to read the file contents.
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	IndexInput openInput(String name) throws IOException;
 
@@ -104,14 +103,14 @@ public interface FileEntryHandler {
 	 *
 	 * @param name The name of the file
 	 * @return An <code>IndexOutput</code> to write the file contents
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	IndexOutput createOutput(String name) throws IOException;
 
 	/**
 	 * Closes the file entry handler.
 	 *
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	void close() throws IOException;
 }

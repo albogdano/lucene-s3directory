@@ -15,40 +15,32 @@
  */
 package com.erudika.lucene.store.s3;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.Lock;
+import com.erudika.lucene.store.s3.handler.FileEntryHandler;
+import com.erudika.lucene.store.s3.lock.NoOpLock;
+import com.erudika.lucene.store.s3.lock.S3Lock;
+import com.erudika.lucene.store.s3.support.LuceneFileNames;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.store.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.erudika.lucene.store.s3.handler.FileEntryHandler;
-import com.erudika.lucene.store.s3.lock.S3LegalHoldLock;
-import com.erudika.lucene.store.s3.support.LuceneFileNames;
-import java.util.LinkedList;
-import java.util.stream.Collectors;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
-import com.erudika.lucene.store.s3.lock.S3Lock;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import org.apache.lucene.index.IndexWriter;
-import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
+import software.amazon.awssdk.services.s3.model.S3Object;
+import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * A S3 based implementation of a Lucene <code>Directory</code> allowing the storage of a Lucene index within S3.
  * The directory works against a single bucket, where the binary data is stored in <code>objects</code>.
- * Each "object" has an entry in the S3, and different {@link org.apache.lucene.store.s3.handler.FileEntryHandler}
+ * Each "object" has an entry in the S3, and different {@link FileEntryHandler}
  * can be defines for different files (or files groups).
  *
  * @author kimchy
@@ -65,7 +57,9 @@ public class S3Directory extends Directory {
 
 	private String bucket;
 
-	private final S3Client s3 = S3Client.create();
+	private String path;
+
+	private final S3Client s3 = S3SingletonClient.getS3Client();
 
 	/**
 	 * Creates a new S3 directory.
@@ -73,8 +67,8 @@ public class S3Directory extends Directory {
 	 * @param bucketName The bucket name
 	 * @throws S3StoreException
 	 */
-	public S3Directory(final String bucketName) throws S3StoreException {
-		initialize(bucketName, new S3DirectorySettings());
+	public S3Directory(final String bucketName, final String pathName) throws S3StoreException {
+		initialize(bucketName, pathName, new S3DirectorySettings());
 	}
 
 	/**
@@ -83,12 +77,13 @@ public class S3Directory extends Directory {
 	 * @param bucketName The table name that will be used
 	 * @param settings The settings to configure the directory
 	 */
-	public S3Directory(final String bucketName, final S3DirectorySettings settings) {
-		initialize(bucketName, settings);
+	public S3Directory(final String bucketName, final String pathName, final S3DirectorySettings settings) {
+		initialize(bucketName, pathName, settings);
 	}
 
-	private void initialize(final String bucket, S3DirectorySettings settings) {
+	private void initialize(final String bucket, final String path, S3DirectorySettings settings) {
 		this.bucket = bucket.toLowerCase();
+		this.path = path;
 		this.settings = settings;
 		final Map<String, S3FileEntrySettings> fileEntrySettings = settings.getFileEntrySettings();
 		// go over all the file entry settings and configure them
@@ -105,6 +100,7 @@ public class S3Directory extends Directory {
 						+ feSettings.getSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE) + "]");
 			}
 		}
+		logger.info(fileEntrySettings.entrySet().stream().map(e -> e.getKey() + " -> " + e.getValue()).collect(Collectors.joining(", ")));
 	}
 
 	/**
@@ -117,7 +113,7 @@ public class S3Directory extends Directory {
 	 * Returns <code>true</code> if the S3 bucket exists.
 	 *
 	 * @return <code>true</code> if the S3 bucket exists, <code>false</code> otherwise
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 * @throws UnsupportedOperationException If the S3 dialect does not support it
 	 */
 	public boolean bucketExists() {
@@ -135,7 +131,7 @@ public class S3Directory extends Directory {
 	/**
 	 * @param name
 	 * @return
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	public boolean fileExists(final String name) throws IOException {
 		return getFileEntryHandler(name).fileExists(name);
@@ -161,7 +157,7 @@ public class S3Directory extends Directory {
 	/**
 	 * Creates a new S3 bucket.
 	 *
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	public void create() {
 		if (!bucketExists()) {
@@ -217,7 +213,7 @@ public class S3Directory extends Directory {
 
 	/**
 	 * @param name
-	 * @throws java.io.IOException
+	 * @throws IOException
 	 */
 	public void forceDeleteFile(final String name) throws IOException {
 		if (logger.isDebugEnabled()) {
@@ -230,7 +226,7 @@ public class S3Directory extends Directory {
 	 * @return @throws IOException
 	 */
 	protected Lock createLock() throws IOException {
-		return new S3LegalHoldLock();
+		return new NoOpLock();
 	}
 
 	/**
@@ -263,11 +259,12 @@ public class S3Directory extends Directory {
 		try {
 			ListObjectsV2Iterable responses = s3.listObjectsV2Paginator(b -> b.bucket(bucket));
 			for (ListObjectsV2Response response : responses) {
-				names.addAll(response.contents().stream().map((obj) -> obj.key()).collect(Collectors.toList()));
+				names.addAll(response.contents().stream().map(S3Object::key).collect(Collectors.toList()));
 			}
 		} catch (Exception e) {
-			logger.warn("{}", e.toString());
+			logger.error("{}", e.toString());
 		}
+
 		return names.toArray(new String[]{});
 	}
 
@@ -304,12 +301,12 @@ public class S3Directory extends Directory {
 
 	@Override
 	public void sync(final Collection<String> names) throws IOException {
-//		logger.warn("S3Directory.sync({})", names);
-//		for (final String name : names) {
-//			if (!fileExists(name)) {
-//				throw new S3StoreException("Failed to sync, file " + name + " not found");
-//			}
-//		}
+		logger.warn("S3Directory.sync({})", names);
+		for (final String name : names) {
+			if (!fileExists(name)) {
+				throw new S3StoreException("Failed to sync, file " + name + " not found");
+			}
+		}
 	}
 
 	@Override
@@ -362,6 +359,10 @@ public class S3Directory extends Directory {
 	 */
 	public String getBucket() {
 		return bucket;
+	}
+
+	public String getPath() {
+		return path;
 	}
 
 	public S3DirectorySettings getSettings() {

@@ -33,7 +33,7 @@ import org.apache.lucene.search.TopDocs;
 public class ReadIndex {
 
 	public static void main(String[] args) throws IOException, ParseException, org.apache.lucene.queryparser.classic.ParseException {
-		S3Directory s3Directory = new S3Directory("bucket");
+		S3Directory s3Directory = new S3Directory("lucene-test", "lucene-kashyap");
 		try ( IndexReader indexReader = DirectoryReader.open(s3Directory)) {
 			IndexSearcher searcher = new IndexSearcher(indexReader);
 

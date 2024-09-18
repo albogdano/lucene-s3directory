@@ -28,6 +28,8 @@ import org.apache.lucene.store.BufferedIndexInput;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
+import java.io.EOFException;
+
 /**
  * An <code>IndexInput</code> implementation, that for every buffer refill will go and fetch the data from the database.
  *
@@ -109,7 +111,11 @@ public class FetchOnBufferReadS3IndexInput extends S3BufferedIndexInput {
 		ResponseInputStream<GetObjectResponse> res = s3Directory.getS3().
 				getObject(bd -> bd.bucket(s3Directory.getBucket()).key(name));
 
-		readInternal(res, buffer, 0, bufferLength);
+		if (buffer == null) {
+			buffer = new byte[bufferSize];
+			seekInternal(bufferStart);
+		}
+		readInternal(res, b, 0, bufferLength);
 
 		if (totalLength == -1) {
 			totalLength = res.response().contentLength();
@@ -187,14 +193,13 @@ public class FetchOnBufferReadS3IndexInput extends S3BufferedIndexInput {
 
 		@Override
 		protected void readInternal(ByteBuffer bb) throws IOException {
-//			final long start = getFilePointer();
-//			if (start + len > length) {
-//				throw new EOFException("read past EOF: " + this);
-//			}
-//			System.out.println(name);
-//			base.seek(fileOffset + start);
-//			base.readBytes(bb.array(), (int) fileOffset, (int) length, false);
-			throw new UnsupportedOperationException("THE PROBLEM IS HERE! - IF ANYONE CAN FIX THIS - PRs ARE OPEN.");
+			long start = getFilePointer();
+			if (start + bb.remaining() > length) {
+				throw new EOFException("read past EOF: " + this);
+			}
+			base.seek(fileOffset + start);
+			base.readBytes(bb.array(), bb.position(), bb.remaining());
+			bb.position(bb.position() + bb.remaining());
 		}
 
 		@Override

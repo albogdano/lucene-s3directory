@@ -15,11 +15,10 @@
  */
 package com.erudika.lucene.store.s3.lock;
 
-import java.io.IOException;
-
+import com.erudika.lucene.store.s3.S3Directory;
 import org.apache.lucene.store.Lock;
 
-import com.erudika.lucene.store.s3.S3Directory;
+import java.io.IOException;
 
 /**
  * A simple no op lock. Performs no locking.

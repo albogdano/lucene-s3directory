@@ -15,19 +15,18 @@
  */
 package com.erudika.lucene.store.s3.index;
 
-import java.io.IOException;
-import java.util.zip.CRC32;
-import java.util.zip.Checksum;
-
-import org.apache.lucene.store.BufferedChecksum;
-import org.apache.lucene.store.IndexOutput;
-
 import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
-import java.io.InputStream;
-import java.util.ArrayList;
+import org.apache.lucene.store.BufferedChecksum;
+import org.apache.lucene.store.IndexOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 /**
  * An <code>IndexOutput</code> implementation that initially writes the data to a memory buffer. Once it exceeds the
@@ -42,9 +41,9 @@ public class RAMS3IndexOutput extends IndexOutput implements S3IndexConfigurable
 	private RAMIndexOutput ramIndexOutput;
 	private final Checksum crc;
 
-	public RAMS3IndexOutput() {
-		super("RAMAndFileS3IndexOutput", "RAMAndFileS3IndexOutput");
-		crc = new BufferedChecksum(new CRC32());
+	public RAMS3IndexOutput(String name) {
+		super("RAMAndFileS3IndexOutput", name);
+        crc = new BufferedChecksum(new CRC32());
 	}
 
 	@Override
@@ -215,7 +214,7 @@ public class RAMS3IndexOutput extends IndexOutput implements S3IndexConfigurable
 
 		@Override
 		protected void doAfterClose() throws IOException {
-			file = null;
+//			file = null;
 		}
 
 		@Override
