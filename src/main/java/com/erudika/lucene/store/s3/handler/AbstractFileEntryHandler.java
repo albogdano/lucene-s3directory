@@ -19,6 +19,7 @@ import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import com.erudika.lucene.store.s3.S3StoreException;
 import com.erudika.lucene.store.s3.index.S3IndexConfigurable;
+import java.io.IOException;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.slf4j.Logger;
@@ -28,8 +29,6 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-
-import java.io.IOException;
 
 /**
  * A base file entry handler that supports most of the file entry base operations.
@@ -91,6 +90,7 @@ public abstract class AbstractFileEntryHandler implements FileEntryHandler {
 
 			s3Directory.getS3().putObject(b -> b.bucket(bucket).key(name),
 					RequestBody.fromInputStream(res, res.response().contentLength()));
+			s3Directory.getFileSizes().put(name, res.response().contentLength());
 		} catch (Exception e) {
 			logger.error(null, e);
 		}

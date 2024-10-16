@@ -18,8 +18,6 @@ package com.erudika.lucene.store.s3;
 import com.erudika.lucene.store.s3.handler.ActualDeleteFileEntryHandler;
 import com.erudika.lucene.store.s3.index.FetchOnBufferReadS3IndexInput;
 import com.erudika.lucene.store.s3.index.RAMS3IndexOutput;
-import com.erudika.lucene.store.s3.index.S3IndexInput;
-
 import java.util.Properties;
 
 /**
@@ -63,9 +61,7 @@ public class S3FileEntrySettings {
 	 */
 	public S3FileEntrySettings() {
 		setClassSetting(S3FileEntrySettings.FILE_ENTRY_HANDLER_TYPE, ActualDeleteFileEntryHandler.class);
-		//TODO: Fix this
-//		setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnBufferReadS3IndexInput.class);
-		setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, S3IndexInput.class);
+		setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING, FetchOnBufferReadS3IndexInput.class);
 		setClassSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING, RAMS3IndexOutput.class);
 	}
 

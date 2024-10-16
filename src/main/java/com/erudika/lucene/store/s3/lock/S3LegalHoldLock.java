@@ -16,6 +16,7 @@
 package com.erudika.lucene.store.s3.lock;
 
 import com.erudika.lucene.store.s3.S3Directory;
+import java.io.IOException;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.LockObtainFailedException;
@@ -25,12 +26,9 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.model.ObjectLockLegalHold;
 import software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus;
-import software.amazon.awssdk.services.s3.model.PutObjectLegalHoldRequest;
-
-import java.io.IOException;
-
 import static software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus.OFF;
 import static software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus.ON;
+import software.amazon.awssdk.services.s3.model.PutObjectLegalHoldRequest;
 
 /**
  * <p>
@@ -72,17 +70,10 @@ public class S3LegalHoldLock extends Lock implements S3Lock {
 			if (logger.isDebugEnabled()) {
 				logger.info("close({})", name);
 			}
-//			res = s3Directory.getS3().getObjectLegalHold(b -> b.bucket(s3Directory.getBucket()).key(name));
-
 			putObjectLegalHold(OFF);
-//			LOCKS.remove(name);
 		} catch (AwsServiceException | SdkClientException e) {
 			throw new AlreadyClosedException("Lock was already released: ", e);
 		}
-
-//		if (res != null && res.legalHold().status().equals(OFF)) {
-//			throw new AlreadyClosedException("Lock was already released: " + this);
-//		}
 	}
 
 	@Override
@@ -92,7 +83,6 @@ public class S3LegalHoldLock extends Lock implements S3Lock {
 				logger.info("ensureValid({})", name);
 			}
 			if (!isLegalHoldOn()) {
-				// TODO should throw AlreadyClosedException??
 				throw new AlreadyClosedException("Lock instance already released: " + this);
 			}
 		} catch (AwsServiceException | SdkClientException e) {

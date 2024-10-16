@@ -16,9 +16,13 @@
 package com.erudika.lucene.store.s3;
 
 import com.erudika.lucene.store.s3.handler.FileEntryHandler;
-import com.erudika.lucene.store.s3.lock.NoOpLock;
+import com.erudika.lucene.store.s3.lock.S3LegalHoldLock;
 import com.erudika.lucene.store.s3.lock.S3Lock;
 import com.erudika.lucene.store.s3.support.LuceneFileNames;
+import java.io.IOException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.store.*;
 import org.slf4j.Logger;
@@ -31,11 +35,6 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
-
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * A S3 based implementation of a Lucene <code>Directory</code> allowing the storage of a Lucene index within S3.
@@ -59,7 +58,7 @@ public class S3Directory extends Directory {
 
 	private String path;
 
-	private final S3Client s3 = S3SingletonClient.getS3Client();
+	private S3Client s3;
 
 	/**
 	 * Creates a new S3 directory.
@@ -82,6 +81,7 @@ public class S3Directory extends Directory {
 	}
 
 	private void initialize(final String bucket, final String path, S3DirectorySettings settings) {
+		this.s3 = S3Client.create();
 		this.bucket = bucket.toLowerCase();
 		this.path = path;
 		this.settings = settings;
@@ -226,7 +226,7 @@ public class S3Directory extends Directory {
 	 * @return @throws IOException
 	 */
 	protected Lock createLock() throws IOException {
-		return new NoOpLock();
+		return new S3LegalHoldLock();
 	}
 
 	/**

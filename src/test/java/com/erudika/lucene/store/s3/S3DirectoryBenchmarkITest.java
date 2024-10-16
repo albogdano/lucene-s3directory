@@ -15,12 +15,10 @@
  */
 package com.erudika.lucene.store.s3;
 
-import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.bucketName;
-import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.path;
+import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.util.Collection;
-
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
@@ -44,7 +42,7 @@ public class S3DirectoryBenchmarkITest extends AbstractS3DirectoryITest {
 
 	@BeforeClass
 	public static void setUp() throws Exception {
-		s3Directory = new S3Directory(bucketName, path);
+		s3Directory = new S3Directory(TEST_BUCKET, "");
 		((S3Directory) s3Directory).create();
 		ramDirectory = new MMapDirectory(FileSystems.getDefault().getPath("target/index"));
 		fsDirectory = FSDirectory.open(FileSystems.getDefault().getPath("target/index"));

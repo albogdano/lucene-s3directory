@@ -15,20 +15,17 @@
  */
 package com.erudika.lucene.store.s3.index;
 
+import com.erudika.lucene.store.s3.S3Directory;
+import com.erudika.lucene.store.s3.S3FileEntrySettings;
+import java.io.EOFException;
 import java.io.IOException;
-
+import java.nio.ByteBuffer;
+import org.apache.lucene.store.BufferedIndexInput;
 import org.apache.lucene.store.IndexInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.erudika.lucene.store.s3.S3Directory;
-import com.erudika.lucene.store.s3.S3FileEntrySettings;
-import java.nio.ByteBuffer;
-import org.apache.lucene.store.BufferedIndexInput;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-
-import java.io.EOFException;
 
 /**
  * An <code>IndexInput</code> implementation, that for every buffer refill will go and fetch the data from the database.
@@ -135,7 +132,16 @@ public class FetchOnBufferReadS3IndexInput extends S3BufferedIndexInput {
 
 	@Override
 	protected void seekInternal(final long pos) throws IOException {
-		position = pos;
+		synchronized (this) {
+			if (pos < 0) {
+				throw new IllegalArgumentException("Seek position cannot be negative");
+			}
+			if (pos > length()) {
+				throw new EOFException("Seek position is past EOF");
+			}
+			logger.info("Name: " + name + " Seeking to position: " + pos);
+			position = pos;
+		}
 	}
 
 	@Override

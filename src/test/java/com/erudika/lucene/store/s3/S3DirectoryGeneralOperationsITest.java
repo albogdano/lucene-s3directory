@@ -39,7 +39,7 @@ public class S3DirectoryGeneralOperationsITest extends AbstractS3DirectoryITest 
 
 	@BeforeClass
 	public static void setUp() throws Exception {
-		s3Directory = new S3Directory(TEST_BUCKET);
+		s3Directory = new S3Directory(TEST_BUCKET, "");
 		s3Directory.create();
 	}
 

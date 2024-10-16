@@ -15,8 +15,8 @@
  */
 package com.erudika.lucene.store.s3;
 
-import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.bucketName;
-import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.path;
+import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET;
+import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET1;
 import java.io.IOException;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.store.Lock;
@@ -37,10 +37,10 @@ public class S3DirectoryLockITest extends AbstractS3DirectoryITest {
 	public void setUp() throws Exception {
 		final S3DirectorySettings settings = new S3DirectorySettings();
 
-		dir1 = new S3Directory(bucketName, path);
+		dir1 = new S3Directory(TEST_BUCKET, "");
 		dir1.create();
 
-		dir2 = new S3Directory(bucketName, path);
+		dir2 = new S3Directory(TEST_BUCKET1, "");
 	}
 
 	@After

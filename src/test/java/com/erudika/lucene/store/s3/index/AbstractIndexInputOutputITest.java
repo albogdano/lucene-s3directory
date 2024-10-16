@@ -15,11 +15,9 @@
  */
 package com.erudika.lucene.store.s3.index;
 
-import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.bucketName;
-import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.path;
-
 import com.erudika.lucene.store.s3.AbstractS3DirectoryITest;
 import com.erudika.lucene.store.s3.S3Directory;
+import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET;
 import com.erudika.lucene.store.s3.S3DirectorySettings;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import java.io.IOException;
@@ -47,7 +45,7 @@ public abstract class AbstractIndexInputOutputITest extends AbstractS3DirectoryI
 		settings.getDefaultFileEntrySettings().setClassSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING,
 				indexOutputClass());
 
-		s3Directory = new S3Directory(bucketName, path);
+		s3Directory = new S3Directory(TEST_BUCKET, "", settings);
 		s3Directory.create();
 	}
 
