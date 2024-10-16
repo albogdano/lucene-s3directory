@@ -30,8 +30,8 @@ The `S3Directory` uses legal hold locks on `write.lock` files. The AWS Java SDK 
 
 **Requirements:**
 
-- Java 1.8+
-- Lucene 7.6+ compatible
+- Java 17+
+- Lucene 10+ compatible
 
 To build the project:
 ```
