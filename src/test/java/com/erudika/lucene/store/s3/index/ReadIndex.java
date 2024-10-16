@@ -24,6 +24,7 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.StoredFields;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
@@ -40,9 +41,10 @@ public class ReadIndex {
 			QueryParser queryParser = new QueryParser("CONTENT", new StandardAnalyzer());
 			Query parseredQuery = queryParser.parse("oracle");
 			TopDocs result = searcher.search(parseredQuery, 10000);
+			StoredFields storedFields = searcher.storedFields();
 			System.out.println(result.scoreDocs.length);
 			for (ScoreDoc scoreDoc : result.scoreDocs) {
-				final Document document = searcher.doc(scoreDoc.doc);
+				final Document document = storedFields.document(scoreDoc.doc);
 				final String documentId = document.get("ID");
 				final String table = document.get("TABLE");
 				System.out.println(table + " " + documentId + " " +  scoreDoc.score);

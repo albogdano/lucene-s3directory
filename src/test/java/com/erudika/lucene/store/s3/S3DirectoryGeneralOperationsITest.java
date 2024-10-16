@@ -17,6 +17,7 @@ package com.erudika.lucene.store.s3;
 
 import java.io.IOException;
 import java.util.Arrays;
+import org.apache.lucene.store.FlushInfo;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexOutput;
 import org.junit.AfterClass;
@@ -31,13 +32,14 @@ public class S3DirectoryGeneralOperationsITest extends AbstractS3DirectoryITest 
 
 	private static S3Directory s3Directory;
 
-	public static final String bucketName = "lucene-test";
-	public static final String path = "benchmarking";
+	public static final String TEST_BUCKET =  "TEST-lucene-s3-directory-dir";
+	public static final String TEST_BUCKET1 = "TEST-lucene-s3-directory-dir1";
+	public static final String TEST_BUCKET2 = "TEST-lucene-s3-directory-dir2";
 
 
 	@BeforeClass
 	public static void setUp() throws Exception {
-		s3Directory = new S3Directory(bucketName, path);
+		s3Directory = new S3Directory(TEST_BUCKET);
 		s3Directory.create();
 	}
 
@@ -53,7 +55,7 @@ public class S3DirectoryGeneralOperationsITest extends AbstractS3DirectoryITest 
 
 		assertFalse(s3Directory.fileExists("test1"));
 
-		try (IndexOutput indexOutput = s3Directory.createOutput("test1", new IOContext())) {
+		try (IndexOutput indexOutput = s3Directory.createOutput("test1", new IOContext(new FlushInfo(0, 0)))) {
 			indexOutput.writeString("TEST STRING");
 		}
 
@@ -70,7 +72,7 @@ public class S3DirectoryGeneralOperationsITest extends AbstractS3DirectoryITest 
 
 		assertFalse(s3Directory.fileExists("test1"));
 
-		try (IndexOutput indexOutput = s3Directory.createOutput("test1", new IOContext())) {
+		try (IndexOutput indexOutput = s3Directory.createOutput("test1", new IOContext(new FlushInfo(0, 0)))) {
 			indexOutput.writeString("TEST STRING");
 		}
 

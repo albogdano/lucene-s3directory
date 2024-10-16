@@ -23,6 +23,7 @@ import com.erudika.lucene.store.s3.S3Directory;
 import com.erudika.lucene.store.s3.S3DirectorySettings;
 import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import java.io.IOException;
+import org.apache.lucene.store.FlushInfo;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
@@ -131,7 +132,7 @@ public abstract class AbstractIndexInputOutputITest extends AbstractS3DirectoryI
 
 	private void insertData() throws IOException {
 		final byte[] test = new byte[]{1, 2, 3, 4, 5, 6, 7, 8};
-		try (IndexOutput indexOutput = s3Directory.createOutput("value1", new IOContext())) {
+		try (IndexOutput indexOutput = s3Directory.createOutput("value1", new IOContext(new FlushInfo(0, 0)))) {
 			indexOutput.writeInt(-1);
 			indexOutput.writeLong(10);
 			indexOutput.writeInt(0);
@@ -148,7 +149,7 @@ public abstract class AbstractIndexInputOutputITest extends AbstractS3DirectoryI
 		Assert.assertTrue(s3Directory.fileExists("value1"));
 		Assert.assertEquals(36, s3Directory.fileLength("value1"));
 
-		try (IndexInput indexInput = s3Directory.openInput("value1", new IOContext())) {
+		try (IndexInput indexInput = s3Directory.openInput("value1", new IOContext(new FlushInfo(0, 0)))) {
 			Assert.assertEquals(-1, indexInput.readInt());
 			Assert.assertEquals(10, indexInput.readLong());
 			Assert.assertEquals(0, indexInput.readInt());

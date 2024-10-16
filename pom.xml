@@ -32,12 +32,12 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<skipTests>false</skipTests>
-		<lucene.version>9.0.0</lucene.version>
+		<lucene.version>10.0.0</lucene.version>
 		<slf4j.version>1.7.32</slf4j.version>
-		<junit.version>4.12</junit.version>
+		<junit.version>4.13.2</junit.version>
 		<mockito.version>1.10.19</mockito.version>
-		<log4j.version>2.17.0</log4j.version>
-		<awssdk.version>2.17.113</awssdk.version>
+		<log4j.version>2.24.1</log4j.version>
+		<awssdk.version>2.28.19</awssdk.version>
 	</properties>
 
 	<dependencies>

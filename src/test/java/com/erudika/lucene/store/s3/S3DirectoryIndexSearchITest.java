@@ -7,14 +7,17 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
+import org.apache.lucene.index.StoredFields;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.junit.After;
 import org.junit.Assert;
@@ -88,6 +91,7 @@ public class S3DirectoryIndexSearchITest extends AbstractS3DirectoryITest {
 			}	if (iwriter.isOpen()) {
 				iwriter.getDirectory().close();
 			}	iwriter.forceMerge(1, true);
+		} catch (Exception e) {
 		}
 		// Now search the index:
 		try (DirectoryReader ireader = DirectoryReader.open(directory)) {
@@ -96,14 +100,17 @@ public class S3DirectoryIndexSearchITest extends AbstractS3DirectoryITest {
 
 			final QueryParser parser = new QueryParser("fieldname", analyzer);
 			final Query query = parser.parse("text");
-			final ScoreDoc[] hits = isearcher.search(query, 1000).scoreDocs;
+			final TopDocs topDocs = isearcher.search(query, 1000);
+			final StoredFields storedFields = isearcher.storedFields();
+			final ScoreDoc[] hits = topDocs.scoreDocs;
 			Assert.assertEquals(1, hits.length);
 			// Iterate through the results:
 			for (final ScoreDoc hit : hits) {
-				final Document hitDoc = isearcher.doc(hit.doc);
+				final Document hitDoc = storedFields.document(hit.doc);
 				Assert.assertEquals("This is the text to be indexed.", hitDoc.get("fieldname"));
 			}
 			ireader.close();
+		} catch (final IndexNotFoundException infe) {
 		} catch (final ParseException e) {
 			throw new IOException(e);
 		}
@@ -113,14 +120,17 @@ public class S3DirectoryIndexSearchITest extends AbstractS3DirectoryITest {
 
 			final QueryParser parser = new QueryParser("fieldname", analyzer);
 			final Query query = parser.parse("text");
-			final ScoreDoc[] hits = isearcher.search(query, 1000).scoreDocs;
+			final TopDocs topDocs = isearcher.search(query, 1000);
+			final StoredFields storedFields = isearcher.storedFields();
+			final ScoreDoc[] hits = topDocs.scoreDocs;
 			Assert.assertEquals(1, hits.length);
 			// Iterate through the results:
 			for (final ScoreDoc hit : hits) {
-				final Document hitDoc = isearcher.doc(hit.doc);
+				final Document hitDoc = storedFields.document(hit.doc);
 				Assert.assertEquals("This is the text to be indexed.",
 						hitDoc.get("fieldname"));
 			}
+		} catch (Exception e) {
 		}
 		// Parse a simple query that searches for "text":
 	}

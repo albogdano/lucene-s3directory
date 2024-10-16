@@ -58,6 +58,7 @@ public class S3DirectoryLockITest extends AbstractS3DirectoryITest {
 			}
 		} finally {
 			dir1.close();
+			dir1.emptyBucket();
 			dir1.delete();
 			dir2.close();
 		}

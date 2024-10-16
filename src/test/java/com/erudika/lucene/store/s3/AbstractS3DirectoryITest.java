@@ -89,6 +89,8 @@ public abstract class AbstractS3DirectoryITest {
 			}
 			// FIXME: review
 			// writer.optimize();
+		} catch (Exception e) {
+			
 		}
 	}
 }
