@@ -72,15 +72,6 @@ public abstract class AbstractS3DirectoryITest {
 			for (final Object element : docs) {
 				final Document doc = new Document();
 				final String word = (String) element;
-				// FIXME: review
-				// doc.add(new Field("keyword", word, Field.Store.YES,
-				// Field.Index.UN_TOKENIZED));
-				// doc.add(new Field("unindexed", word, Field.Store.YES,
-				// Field.Index.NO));
-				// doc.add(new Field("unstored", word, Field.Store.NO,
-				// Field.Index.TOKENIZED));
-				// doc.add(new Field("text", word, Field.Store.YES,
-				// Field.Index.TOKENIZED));
 				doc.add(new StringField("keyword", word, Field.Store.YES));
 				doc.add(new StringField("unindexed", word, Field.Store.YES));
 				doc.add(new StringField("unstored", word, Field.Store.NO));
@@ -90,7 +81,7 @@ public abstract class AbstractS3DirectoryITest {
 			// FIXME: review
 			// writer.optimize();
 		} catch (Exception e) {
-			
+
 		}
 	}
 }

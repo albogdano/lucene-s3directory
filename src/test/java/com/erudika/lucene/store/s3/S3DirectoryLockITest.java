@@ -35,8 +35,6 @@ public class S3DirectoryLockITest extends AbstractS3DirectoryITest {
 
 	@Before
 	public void setUp() throws Exception {
-		final S3DirectorySettings settings = new S3DirectorySettings();
-
 		dir1 = new S3Directory(TEST_BUCKET, "");
 		dir1.create();
 

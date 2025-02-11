@@ -13,13 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.erudika.lucene.store.s3.index;
+package com.erudika.lucene.store.s3;
 
-import com.erudika.lucene.store.s3.AbstractS3DirectoryITest;
-import com.erudika.lucene.store.s3.S3Directory;
 import static com.erudika.lucene.store.s3.S3DirectoryGeneralOperationsITest.TEST_BUCKET;
-import com.erudika.lucene.store.s3.S3DirectorySettings;
-import com.erudika.lucene.store.s3.S3FileEntrySettings;
 import java.io.IOException;
 import org.apache.lucene.store.FlushInfo;
 import org.apache.lucene.store.IOContext;
@@ -33,19 +29,13 @@ import org.junit.Test;
 /**
  * @author kimchy
  */
-public abstract class AbstractIndexInputOutputITest extends AbstractS3DirectoryITest {
+public class AbstractIndexInputOutputITest extends AbstractS3DirectoryITest {
 
 	protected S3Directory s3Directory;
 
 	@Before
 	public void setUp() throws Exception {
-		final S3DirectorySettings settings = new S3DirectorySettings();
-		settings.getDefaultFileEntrySettings().setClassSetting(S3FileEntrySettings.INDEX_INPUT_TYPE_SETTING,
-				indexInputClass());
-		settings.getDefaultFileEntrySettings().setClassSetting(S3FileEntrySettings.INDEX_OUTPUT_TYPE_SETTING,
-				indexOutputClass());
-
-		s3Directory = new S3Directory(TEST_BUCKET, "", settings);
+		s3Directory = new S3Directory(TEST_BUCKET, "", S3LockFactory.INSTANCE);
 		s3Directory.create();
 	}
 
@@ -53,10 +43,6 @@ public abstract class AbstractIndexInputOutputITest extends AbstractS3DirectoryI
 	public void tearDown() throws Exception {
 		s3Directory.close();
 	}
-
-	protected abstract Class<? extends IndexInput> indexInputClass();
-
-	protected abstract Class<? extends IndexOutput> indexOutputClass();
 
 	@Test
 	public void testSize5() throws IOException {
@@ -109,20 +95,11 @@ public abstract class AbstractIndexInputOutputITest extends AbstractS3DirectoryI
 	}
 
 	private void innerTestSize(final int bufferSize) throws IOException {
-		s3Directory.getSettings().getDefaultFileEntrySettings()
-				.setIntSetting(S3BufferedIndexInput.BUFFER_SIZE_SETTING, bufferSize);
-		s3Directory.getSettings().getDefaultFileEntrySettings()
-				.setIntSetting(S3BufferedIndexOutput.BUFFER_SIZE_SETTING, bufferSize);
-
 		insertData();
 		verifyData();
 	}
 
 	private void innertTestSizeWithinTransaction(final int bufferSize) throws IOException {
-		s3Directory.getSettings().getDefaultFileEntrySettings()
-				.setIntSetting(S3BufferedIndexInput.BUFFER_SIZE_SETTING, bufferSize);
-		s3Directory.getSettings().getDefaultFileEntrySettings()
-				.setIntSetting(S3BufferedIndexOutput.BUFFER_SIZE_SETTING, bufferSize);
 
 		insertData();
 		verifyData();
