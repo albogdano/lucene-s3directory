@@ -67,7 +67,7 @@ import org.apache.lucene.store.LockObtainFailedException;
 /**
  * A S3 based implementation of a Lucene <code>Directory</code> allowing the storage of a Lucene index within S3.
  * The directory works against a single bucket, where the binary data is stored in <code>objects</code>.
- * Each "object" has an entry in the S3, and different {@link FileEntryHandler}
+ * Each "object" has an entry in the S3, and different FileEntryHandler
  * can be defines for different files (or files groups).
  *
  * Based on JdbcDirectory by Shay Banon (kimchy)
@@ -194,6 +194,7 @@ public class S3Directory extends Directory {
 
 	/**
 	 * Deletes the S3 bucket (drops it) from the S3.
+	 * @throws IOException if locked
 	 */
 	public void delete() throws IOException {
 		if (bucketExists()) {
@@ -211,7 +212,7 @@ public class S3Directory extends Directory {
 	/**
 	 * Creates a new S3 bucket.
 	 */
-	public void create() throws InterruptedException {
+	public void create() {
 		if (!bucketExists()) {
 			String xml
 					= Xml.create("CreateBucketConfiguration")
@@ -560,6 +561,7 @@ public class S3Directory extends Directory {
 
 	/**
 	 * Returns the MD5 in base64 for the given byte array.
+	 * @param input input bytes
 	 * @return md5 string encoded in base64.
 	 */
 	public static String md5AsBase64(byte[] input) {
