@@ -1,9 +1,13 @@
 # lucene-s3directory
 
-:warning: **EXPERIMENTAL** :warning:
-
 This is a Lucene `Directory` implementation for AWS S3. It stores indices in S3 buckets instead of the local file system.
-This is just a proof of concept for now and is **not** suitable for production use.
+This project is still considered **experimental** but is now in a stable state, meaning, it can be used in production.
+
+There is an open pull request for merge this project into Lucene: apache/lucene#13949.
+
+Also, there's a similar project called [Nixiesearch](https://github.com/nixiesearch) with a broader scope,
+aiming to implement a full-featured, cloud-native search engine on top of S3. Check out the [slides by
+Roman Grebennikov](https://shuttie.github.io/haystack24-nixiesearch-slides/) for an introduction to Nixiesearch.
 
 ## Motivation
 
@@ -24,9 +28,18 @@ But back then S3 did not support locking so he scrapped the implementation:
 > simple to do in a distributed environment, but it must be there in some form, it will make S3 much a more attractive offer.
 
 Since late 2018 [S3 supports locking](https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock-overview.html).
-The `S3Directory` uses legal hold locks on `write.lock` files. The AWS Java SDK v2.0 is used for that reason.
+The `S3Directory` uses legal hold locks on `write.lock` files.
 
 ## Getting started
+
+The package is available on Maven Central:
+```xml
+<dependency>
+  <groupId>com.erudika</groupId>
+  <artifactId>lucene-s3directory</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
 
 **Requirements:**
 
@@ -41,18 +54,55 @@ mvn -DskipTests=true clean install
 **Usage:**
 
 ```java
-S3Directory dir = new S3Directory("my-lucene-index");
-dir.create();
+final S3Directory s3dir = new S3Directory("my-lucene-index");
+s3dir.create();
 
-// use it in your code in place of FSDirectory, for example
+IndexWriterConfig config = new IndexWriterConfig();
+config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+config.setUseCompoundFile(false);
+try (s3dir; IndexWriter writer = new IndexWriter(s3Dir, config)) {
+  Document doc = new Document();
+  String word = "lorem ipsum dolor";
+  doc.add(new StringField("keyword", word, Field.Store.YES));
+  doc.add(new StringField("unindexed", word, Field.Store.YES));
+  doc.add(new StringField("unstored", word, Field.Store.NO));
+  doc.add(new StringField("text", word, Field.Store.YES));
+  writer.addDocument(doc);
 
-// finally
-dir.close();
-dir.delete();
+  final Query query = new TermQuery(new Term("text", "ipsum"));
+  try (DirectoryReader ireader = DirectoryReader.open(s3Dir)) {
+    final IndexSearcher isearcher = new IndexSearcher(ireader);
+    final TopDocs topDocs = isearcher.search(query, 1000);
+    final StoredFields storedFields = isearcher.storedFields();
+    final ScoreDoc[] hits = topDocs.scoreDocs;
+    // Iterate through the results:
+    for (final ScoreDoc hit : hits) {
+      final Document hitDoc = storedFields.document(hit.doc);
+      System.out.println("This is the text found: " + hitDoc.get("text"));
+    }
+  } catch (Exception e) {
+    e.printStackTrace();
+  }
+}
+
+// optionally, close or delete manually, if needed.
+s3dir.close();
+s3dir.delete();
 ```
 
-To run the integration tests, you'll need to have a valid AWS profile configured on your system. The tests will
-run against the real S3 service on AWS.
+The integration tests use [adobe/S3Mock](https://github.com/adobe/S3Mock) library for local testing and don't
+require access to the real S3 service nor an AWS account.
+
+## Dependencies
+
+The project initially used the official AWS Java SDK v2, but that dependency was later removed in favor of the excellent
+and lightweight [AWS Lightweight Java Client](https://github.com/davidmoten/aws-lightweight-client-java) by @davidmoten.
+
+There are 3 dependencies in total:
+
+- AWS Lightweight Java Client
+- Lucene Core
+- SLF4J API
 
 ## Performance
 
@@ -65,6 +115,13 @@ RAMDirectory Time: 225 ms
 FSDirectory Time : 62 ms
 S3Directory Time : 16859 ms
 ```
+
+## Contributions & Goals
+
+Contributions and PRs are welcome, especially those which aim to enhance performance.
+The feature I would like to see implemented the most is some sort of block caching for reads, backed by a `MMapDirectory`.
+The idea for this feature was presented at [Haystack EU '24 by Roman Grebennikov](https://shuttie.github.io/haystack24-nixiesearch-slides/#/15)
+as part of his Nixiesearch presentation.
 
 ## License
 

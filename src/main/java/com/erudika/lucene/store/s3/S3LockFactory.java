@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2024 Erudika. http://erudika.com
+ * Copyright 2013-2025 Erudika. http://erudika.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,22 +17,19 @@
  */
 package com.erudika.lucene.store.s3;
 
+import com.github.davidmoten.aws.lw.client.HttpMethod;
+import com.github.davidmoten.aws.lw.client.xml.XmlElement;
+import com.github.davidmoten.aws.lw.client.xml.builder.Xml;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
+import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.LockFactory;
 import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.store.NoLockFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.awscore.exception.AwsServiceException;
-import software.amazon.awssdk.core.exception.SdkClientException;
-import software.amazon.awssdk.services.s3.model.ObjectLockLegalHold;
-import software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus;
-import static software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus.OFF;
-import static software.amazon.awssdk.services.s3.model.ObjectLockLegalHoldStatus.ON;
-import software.amazon.awssdk.services.s3.model.PutObjectLegalHoldRequest;
 
 /**
  * An AWS S3 lock factory implementation based on legal holds.
@@ -41,14 +38,15 @@ import software.amazon.awssdk.services.s3.model.PutObjectLegalHoldRequest;
 public final class S3LockFactory extends LockFactory {
 
 	/**
-	 * Singleton instance
+	 * Singleton instance.
 	 */
 	public static final S3LockFactory INSTANCE = new S3LockFactory();
 
 	/**
 	 * Default constructor.
 	 */
-	private S3LockFactory() {	}
+	private S3LockFactory() {
+	}
 
 	@Override
 	public Lock obtainLock(Directory dir, String lockName) throws IOException {
@@ -61,8 +59,6 @@ public final class S3LockFactory extends LockFactory {
 
 	static final class S3LegalHoldLock extends Lock {
 
-		private static final Logger logger = LoggerFactory.getLogger(S3LegalHoldLock.class);
-
 		private S3Directory s3Directory;
 		private String name;
 
@@ -72,55 +68,76 @@ public final class S3LockFactory extends LockFactory {
 			obtain();
 		}
 
-		public void obtain() throws IOException {
+		public void obtain() throws LockObtainFailedException {
 			try {
-				if (logger.isDebugEnabled()) {
-					logger.info("obtain({})", name);
-				}
-				putObjectLegalHold(ON);
-			} catch (AwsServiceException | SdkClientException e) {
+				putObjectLegalHold("ON");
+			} catch (Exception e) {
 				throw new LockObtainFailedException("Lock object could not be created: ", e);
 			}
 		}
 
 		@Override
-		public void close() throws IOException {
+		public void close() throws AlreadyClosedException {
 			try {
-				if (logger.isDebugEnabled()) {
-					logger.info("close({})", name);
-				}
-				putObjectLegalHold(OFF);
-			} catch (AwsServiceException | SdkClientException e) {
+				putObjectLegalHold("OFF");
+			} catch (Exception e) {
 				throw new AlreadyClosedException("Lock was already released: ", e);
 			}
 		}
 
 		@Override
-		public void ensureValid() throws IOException {
+		public void ensureValid() throws AlreadyClosedException {
 			try {
-				if (logger.isDebugEnabled()) {
-					logger.info("ensureValid({})", name);
-				}
 				if (!isLegalHoldOn()) {
 					throw new AlreadyClosedException("Lock instance already released: " + this);
 				}
-			} catch (AwsServiceException | SdkClientException e) {
-				throw new AlreadyClosedException("Lock object not found: " + this);
+			} catch (@SuppressWarnings("unused") Exception e) {
+				initializeLockFile();
 			}
 		}
 
 		private boolean isLegalHoldOn() {
-			return s3Directory.getS3().getObjectLegalHold(b
-					-> b.bucket(s3Directory.getBucket()).key(s3Directory.getPath() + name)).legalHold().status().equals(ON);
+			XmlElement res
+					= s3Directory
+							.getS3()
+							.path(s3Directory.getBucket(), s3Directory.getPath() + name)
+							.query("legal-hold")
+							.method(HttpMethod.GET)
+							.responseAsXml();
+			return res != null && res.hasChildren() && res.child("Status").content().equals("ON");
 		}
 
-		private void putObjectLegalHold(ObjectLockLegalHoldStatus status) {
-			s3Directory.getS3().putObjectLegalHold(PutObjectLegalHoldRequest
-					.builder()
-					.bucket(s3Directory.getBucket())
-					.key(s3Directory.getPath() + name)
-					.legalHold(ObjectLockLegalHold.builder().status(status).build())
-					.build());
+		private void putObjectLegalHold(String status) throws NoSuchAlgorithmException {
+			String body
+					= Xml.create("LegalHold")
+							.a("xmlns", "http://s3.amazonaws.com/doc/2006-03-01/")
+							.e("Status")
+							.content(status)
+							.toString();
+			try {
+				s3Directory
+						.getS3()
+						.path(s3Directory.getBucket(), s3Directory.getPath() + name)
+						.query("legal-hold")
+						.header("Content-MD5", S3Directory.md5AsBase64(body.getBytes(StandardCharsets.UTF_8)))
+						.method(HttpMethod.PUT)
+						.requestBody(body)
+						.execute();
+			} catch (@SuppressWarnings("unused") Exception e) {
+				initializeLockFile();
+			}
+		}
+
+		private void initializeLockFile() {
+			if (!s3Directory.fileExists(name)) {
+				// initialize the write.lock file immediately after bucket creation
+				s3Directory
+						.getS3()
+						.path(s3Directory.getBucket(), s3Directory.getPath() + IndexWriter.WRITE_LOCK_NAME)
+						.method(HttpMethod.PUT)
+						.requestBody("")
+						.execute();
+			}
 		}
 
 		@Override
@@ -128,5 +145,4 @@ public final class S3LockFactory extends LockFactory {
 			return "S3LegalHoldLock[" + s3Directory.getBucket() + "/" + name + "]";
 		}
 	}
-
 }

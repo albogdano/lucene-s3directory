@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2019 the original author or authors.
+ * Copyright 2013-2025 Erudika. http://erudika.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,35 +12,57 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * For issues and patches go to: https://github.com/erudika
  */
 package com.erudika.lucene.store.s3;
 
+import com.github.davidmoten.aws.lw.client.Client;
+import com.github.davidmoten.aws.lw.client.Client.Builder;
+import com.github.davidmoten.aws.lw.client.Credentials;
+import com.github.davidmoten.aws.lw.client.HttpMethod;
+import com.github.davidmoten.aws.lw.client.Request;
+import com.github.davidmoten.aws.lw.client.Response;
+import com.github.davidmoten.aws.lw.client.ResponseInputStream;
+import com.github.davidmoten.aws.lw.client.xml.XmlElement;
+import com.github.davidmoten.aws.lw.client.xml.builder.Xml;
 import java.io.EOFException;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintStream;
-import java.io.PrintWriter;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.zip.CRC32;
-import java.util.zip.Checksum;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.store.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.awscore.exception.AwsServiceException;
-import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.core.exception.SdkClientException;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
-import software.amazon.awssdk.services.s3.model.S3Object;
-import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
+import org.apache.lucene.store.AlreadyClosedException;
+import org.apache.lucene.store.BufferedIndexInput;
+import org.apache.lucene.store.ByteBuffersDataOutput;
+import org.apache.lucene.store.ByteBuffersIndexOutput;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.store.IndexOutput;
+import org.apache.lucene.store.Lock;
+import org.apache.lucene.store.LockFactory;
+import org.apache.lucene.store.LockObtainFailedException;
 
 /**
  * A S3 based implementation of a Lucene <code>Directory</code> allowing the storage of a Lucene index within S3.
@@ -48,47 +70,115 @@ import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
  * Each "object" has an entry in the S3, and different {@link FileEntryHandler}
  * can be defines for different files (or files groups).
  *
- * @author kimchy
+ * Based on JdbcDirectory by Shay Banon (kimchy)
  */
 public class S3Directory extends Directory {
-
-	private static final Logger logger = LoggerFactory.getLogger(S3Directory.class);
-
 	private final ConcurrentHashMap<String, Long> fileSizes = new ConcurrentHashMap<>();
 
 	private String bucket;
 
 	private String path;
 
-	private S3Client s3;
+	private Client s3;
 
 	private LockFactory lockFactory;
+
+	private boolean closed = false;
+
+	/**
+	 * Default constructor.
+	 */
+	public S3Directory() {
+		initialize("", "", null, null, null, (LockFactory) S3LockFactory.INSTANCE);
+	}
 
 	/**
 	 * Creates a new S3 directory.
 	 *
 	 * @param bucketName The bucket name
 	 * @param pathName The S3 path (path prefix) within the bucket
-	 * @throws S3StoreException
 	 */
-	public S3Directory(final String bucketName, final String pathName) throws S3StoreException {
-		initialize(bucketName, pathName, S3LockFactory.INSTANCE);
+	public S3Directory(final String bucketName, final String pathName) {
+		initialize(bucketName, pathName, null, null, null, (LockFactory) S3LockFactory.INSTANCE);
 	}
 
 	/**
 	 * Creates a new S3 directory.
 	 *
-	 * @param bucketName The table name that will be used
+	 * @param bucketName The bucket name
+	 * @param pathName The S3 path (path prefix) within the bucket
+	 * @param s3Region The AWS region
+	 * @param s3AccessKey The AWS access key ID
+	 * @param s3Secret The AWS secret key
+	 */
+	public S3Directory(
+			final String bucketName,
+			final String pathName,
+			String s3Region,
+			String s3AccessKey,
+			String s3Secret) {
+		initialize(
+				bucketName,
+				pathName,
+				s3Region,
+				s3AccessKey,
+				s3Secret,
+				(LockFactory) S3LockFactory.INSTANCE);
+	}
+
+	/**
+	 * Creates a new S3 directory.
+	 *
+	 * @param bucketName The bucket that will be used
 	 * @param pathName The S3 path (path prefix) within the bucket
 	 * @param lockFactory A lock factory implementation
 	 */
 	public S3Directory(final String bucketName, final String pathName, LockFactory lockFactory) {
-		initialize(bucketName, pathName, lockFactory);
+		initialize(bucketName, pathName, null, null, null, lockFactory);
 	}
 
-	private void initialize(final String bucket, final String path, LockFactory lockFactory) {
-		this.s3 = S3Client.create();
-		this.bucket = bucket.toLowerCase();
+	/**
+	 * Creates a new S3 directory.
+	 *
+	 * @param s3 An AWS S3 client instance.
+	 * @param bucket S3 bucket name
+	 * @param path The S3 path (path prefix) within the bucket
+	 */
+	public S3Directory(Client s3, String bucket, String path) {
+		this.s3 = s3;
+		this.bucket = bucket.toLowerCase(Locale.ENGLISH);
+		this.path = path;
+		this.lockFactory = S3LockFactory.INSTANCE;
+	}
+
+	private void initialize(
+			final String bucket,
+			final String path,
+			String s3Region,
+			String s3AccessKey,
+			String s3SecretKey,
+			LockFactory lockFactory) {
+		if (s3Region.isBlank()) {
+			s3Region = System.getProperty("aws.region", System.getenv("AWS_REGION"));
+		}
+		if (s3AccessKey.isBlank()) {
+			s3AccessKey = System.getProperty("aws.accessKeyId", System.getenv("AWS_ACCESS_KEY_ID"));
+		}
+		if (s3SecretKey.isBlank()) {
+			s3SecretKey = System.getProperty("aws.secretKey", System.getenv("AWS_SECRET_KEY"));
+		}
+		if (!s3AccessKey.isBlank() && !s3SecretKey.isBlank()) {
+			Builder b = Client.s3();
+			if (!s3Region.isBlank()) {
+				this.s3 = b.region(s3Region).credentials(Credentials.of(s3AccessKey, s3SecretKey)).build();
+			} else {
+				this.s3
+						= b.regionFromEnvironment().credentials(Credentials.of(s3AccessKey, s3SecretKey)).build();
+			}
+		} else {
+			this.s3 = Client.s3().defaultClient().build();
+		}
+		this.bucket = bucket.toLowerCase(Locale.ENGLISH);
 		this.path = path;
 		this.lockFactory = lockFactory;
 	}
@@ -97,225 +187,264 @@ public class S3Directory extends Directory {
 	 * Returns <code>true</code> if the S3 bucket exists.
 	 *
 	 * @return <code>true</code> if the S3 bucket exists, <code>false</code> otherwise
-	 * @throws IOException
-	 * @throws UnsupportedOperationException If the S3 dialect does not support it
 	 */
 	public boolean bucketExists() {
-		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("bucketExists({})", bucket);
-			}
-			s3.headBucket(b -> b.bucket(bucket));
-			return true;
-		} catch (AwsServiceException | SdkClientException e) {
-			return false;
-		}
+		return s3.path(bucket).method(HttpMethod.HEAD).response().exists();
 	}
 
 	/**
 	 * Deletes the S3 bucket (drops it) from the S3.
 	 */
-	public void delete() {
+	public void delete() throws IOException {
 		if (bucketExists()) {
-			if (logger.isDebugEnabled()) {
-				logger.info("delete({})", bucket);
-			}
 			emptyBucket();
-			try {
-				s3.deleteBucket(b -> b.bucket(bucket));
-			} catch (Exception e) {
-				logger.error("Bucket {} not empty - [{}]", bucket, e);
+			if (fileExists(IndexWriter.WRITE_LOCK_NAME)) {
+				lockFactory.obtainLock(this, bucket).close();
+				s3.path(bucket, getPath() + IndexWriter.WRITE_LOCK_NAME)
+						.method(HttpMethod.DELETE)
+						.execute();
 			}
+			s3.path(bucket).method(HttpMethod.DELETE).execute();
 		}
 	}
 
 	/**
 	 * Creates a new S3 bucket.
-	 *
-	 * @throws IOException
 	 */
-	public void create() {
+	public void create() throws InterruptedException {
 		if (!bucketExists()) {
-			if (logger.isDebugEnabled()) {
-				logger.info("create({})", bucket);
+			String xml
+					= Xml.create("CreateBucketConfiguration")
+							.a("xmlns", "http://s3.amazonaws.com/doc/2006-03-01/")
+							.e("LocationConstraint")
+							.content(s3.region().get())
+							.toString();
+			s3.path(bucket)
+					.region(s3.region().get())
+					.method(HttpMethod.PUT)
+					.requestBody(xml)
+					.header("x-amz-bucket-object-lock-enabled", "true")
+					.execute();
+			while (!bucketExists()) {
+				// do nothing
+				System.currentTimeMillis();
 			}
-			s3.createBucket(b -> b.bucket(bucket).objectLockEnabledForBucket(true));
-			s3.waiter().waitUntilBucketExists(b -> b.bucket(bucket));
 		}
-		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("write.lock created in {}", bucket);
-			}
-			// initialize the write.lock file immediately after bucket creation
-			s3.putObject(b -> b.bucket(bucket).key(getPath() + IndexWriter.WRITE_LOCK_NAME), RequestBody.empty());
-		} catch (Exception e) { }
+		// initialize the write.lock file immediately after bucket creation
+		s3.path(bucket, getPath() + IndexWriter.WRITE_LOCK_NAME)
+				.method(HttpMethod.PUT)
+				.requestBody("")
+				.execute();
 	}
 
 	/**
 	 * Empties a bucket on S3.
 	 */
 	public void emptyBucket() {
-		deleteObjectVersions(null);
-	}
+		final LinkedHashMap<String, Set<String>> versions = new LinkedHashMap<>();
+		Optional<String> keyMarker = Optional.empty();
+		Optional<String> versionIdMarker = Optional.empty();
+		Optional<String> prefix = Optional.ofNullable(getPath().isBlank() ? null : getPath());
+		do {
+			Request req = s3.path(bucket).method(HttpMethod.GET).query("versions");
 
-	/**
-	 * Deletes all object versions for a given prefix. If prefix is null, all objects are deleted.
-	 * @param prefix a key prefix for filtering
-	 */
-	private void deleteObjectVersions(String prefix) {
-		LinkedList<ObjectIdentifier> objects = new LinkedList<>();
-		s3.listObjectVersionsPaginator(b -> b.bucket(bucket).prefix(prefix)).forEach((response) -> {
-			if (logger.isDebugEnabled()) {
-				logger.info("deleteContent({}, {})", bucket, response.versions().size());
+			prefix.ifPresent(p -> req.query("prefix", p));
+			keyMarker.ifPresent(c -> req.query("key-marker", c));
+			versionIdMarker.ifPresent(c -> req.query("version-id-marker", c));
+
+			XmlElement res = req.responseAsXml();
+
+			for (XmlElement s3Object : res.childrenWithName("Version")) {
+				String key = s3Object.content("Key");
+				String ver = s3Object.content("VersionId");
+				Set<String> verSet = versions.getOrDefault(key, new LinkedHashSet<>());
+				verSet.add(ver);
+				versions.put(key, verSet);
 			}
-			response.versions().forEach((content) -> {
-				objects.add(ObjectIdentifier.builder().key(content.key()).versionId(content.versionId()).build());
-			});
-		});
-
-		List<ObjectIdentifier> keyz = new LinkedList<>();
-		for (ObjectIdentifier key : objects) {
-			keyz.add(key);
-			if (keyz.size() >= 1000) {
-				s3.deleteObjects(b -> b.bucket(bucket).delete(bd -> bd.objects(keyz)));
-				keyz.clear();
+			if (res.hasChildren() && !res.childrenWithName("KeyMarker").isEmpty()) {
+				keyMarker = Optional.ofNullable(res.child("KeyMarker").content());
+				if (keyMarker.orElse("").isBlank()) {
+					keyMarker = Optional.empty();
+				}
 			}
-			fileSizes.remove(key.key());
-		}
-		if (!keyz.isEmpty()) {
-			s3.deleteObjects(b -> b.bucket(bucket).delete(bd -> bd.objects(keyz)));
+			if (res.hasChildren() && !res.childrenWithName("VersionIdMarker").isEmpty()) {
+				versionIdMarker = Optional.ofNullable(res.child("VersionIdMarker").content());
+				if (versionIdMarker.orElse("").isBlank()) {
+					versionIdMarker = Optional.empty();
+				}
+			}
+		} while (keyMarker.isPresent());
+
+		for (String key : versions.keySet()) {
+			for (String ver : versions.get(key)) {
+				s3.path(bucket, getPath() + key)
+						.query("versionId", ver)
+						.method(HttpMethod.DELETE)
+						.execute();
+			}
+			fileSizes.remove(key);
 		}
 	}
 
 	/**
-	 * @param name
-	 * @throws IOException
+	 * Deletes an index file from S3.
+	 *
+	 * @param name the name of the index file
 	 */
-	public void forceDeleteFile(final String name) throws IOException {
-		if (logger.isDebugEnabled()) {
-			logger.info("forceDeleteFile({})", name);
-		}
-		deleteObjectVersions(name);
-	}
-
-	/**
-	 * @param name
-	 * @return
-	 * @throws IOException
-	 */
-	public boolean fileExists(final String name) throws IOException {
+	private void forceDeleteFile(final String name) {
 		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("fileExists({})", name);
-			}
-			getS3().headObject(b -> b.bucket(bucket).key(getPath() + name));
-			return true;
-		} catch (AwsServiceException | SdkClientException e) {
+			s3.path(bucket, getPath() + name).method(HttpMethod.DELETE).execute();
+		} catch (@SuppressWarnings("unused") Exception e) {
+		}
+	}
+
+	/**
+	 * Checks if a file exists on S3.
+	 *
+	 * @param name the name of the index file
+	 * @return true if file exists
+	 */
+	public boolean fileExists(final String name) {
+		try {
+			return s3.path(bucket, getPath() + name).method(HttpMethod.HEAD).exists();
+		} catch (@SuppressWarnings("unused") Exception e) {
 			return false;
 		}
 	}
 
-	public long fileModified(final String name) throws IOException {
+	/**
+	 * Returns the last time when the file was modified.
+	 *
+	 * @param name index file name
+	 * @return timestamp in milliseconds
+	 */
+	public long fileModified(final String name) {
 		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("fileModified({})", name);
-			}
-			ResponseInputStream<GetObjectResponse> res = getS3().getObject(b -> b.bucket(bucket).key(getPath() + name));
-			return res.response().lastModified().toEpochMilli();
-		} catch (Exception e) {
+			Response res = s3.path(bucket, getPath() + name).method(HttpMethod.HEAD).response();
+			return LocalDateTime.parse(
+					res.headers().getOrDefault("Last-Modified", List.of("")).stream()
+							.findFirst()
+							.orElse(""))
+					.toInstant(ZoneOffset.UTC)
+					.toEpochMilli();
+		} catch (@SuppressWarnings("unused") Exception e) {
 			return 0L;
 		}
 	}
 
-	public void touchFile(final String name) throws IOException {
-		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("touchFile({})", name);
-			}
-			ResponseInputStream<GetObjectResponse> res = getS3().getObject(b -> b.bucket(bucket).key(getPath() + name));
-
-			getS3().putObject(b -> b.bucket(bucket).key(getPath() + name),
-					RequestBody.fromInputStream(res, res.response().contentLength()));
-			getFileSizes().put(name, res.response().contentLength());
-		} catch (Exception e) {
-			logger.error(null, e);
-		}
-	}
-
-	public void renameFile(final String from, final String to) throws IOException {
-		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("renameFile({}, {})", from, to);
-			}
-			getS3().copyObject(b -> b.sourceBucket(bucket).sourceKey(from).destinationBucket(bucket).destinationKey(to));
-			getFileSizes().put(to, getFileSizes().remove(from));
-			deleteFile(from);
-		} catch (Exception e) {
-			logger.error(null, e);
-		}
+	private void renameFile(final String from, final String to) throws FileNotFoundException {
+		s3.path(bucket, getPath() + to)
+				.header("x-amz-copy-source", "/" + bucket + "/" + getPath() + from)
+				.method(HttpMethod.PUT)
+				.execute();
+		getFileSizes().put(to, getFileSizes().remove(from));
+		deleteFile(from);
 	}
 
 	@Override
 	public String[] listAll() {
-		if (logger.isDebugEnabled()) {
-			logger.info("listAll({})", bucket);
-		}
 		final LinkedList<String> names = new LinkedList<>();
-		try {
-			ListObjectsV2Iterable responses = s3.listObjectsV2Paginator(b -> b.bucket(bucket));
-			for (ListObjectsV2Response response : responses) {
-				names.addAll(response.contents().stream().map(S3Object::key).collect(Collectors.toList()));
-			}
-		} catch (Exception e) {
-			logger.error("{}", e.toString());
-		}
+		Optional<String> continuationToken = Optional.empty();
+		Optional<String> prefix = Optional.ofNullable(getPath().isBlank() ? null : getPath());
+		do {
+			Request req = s3.path(bucket).method(HttpMethod.GET).query("list-type", "2");
 
-		return names.toArray(new String[]{});
+			prefix.ifPresent(p -> req.query("prefix", p));
+			continuationToken.ifPresent(c -> req.query("continuation-token", c));
+
+			XmlElement res = req.responseAsXml();
+
+			for (XmlElement s3Object : res.childrenWithName("Contents")) {
+				names.add(s3Object.content("Key"));
+			}
+			if (res.hasChildren() && !res.childrenWithName("NextContinuationToken").isEmpty()) {
+				continuationToken = Optional.ofNullable(res.child("NextContinuationToken").content());
+			}
+		} while (continuationToken.isPresent());
+		return names.stream()
+				.filter(k -> !k.equals(IndexWriter.WRITE_LOCK_NAME))
+				.toArray(String[]::new);
 	}
 
 	@Override
-	public void deleteFile(final String name) throws IOException {
+	public void deleteFile(final String name) throws FileNotFoundException {
+		if (!fileExists(name)) {
+			throw new FileNotFoundException();
+		}
 		forceDeleteFile(name);
-		if (isStaticFile(name)) {
-			// TODO is necessary??
-			logger.warn("S3Directory.deleteFile({}), is static file", name);
-		} else {
+		if (!isStaticFile(name)) {
 			getFileSizes().remove(name);
 		}
 	}
 
 	@Override
-	public long fileLength(final String name) throws IOException {
+	public long fileLength(final String name) {
 		try {
-			if (logger.isDebugEnabled()) {
-				logger.info("fileLength({})", name);
-			}
-			return getFileSizes().computeIfAbsent(name, n ->
-				getS3().getObject(b -> b.bucket(bucket).key(name)).response().contentLength()
-			);
-		} catch (Exception e) {
-			logger.error(null, e);
+			return getFileSizes()
+					.computeIfAbsent(
+							name,
+							n
+							-> Long.valueOf(
+									s3.path(bucket, getPath() + name)
+											.method(HttpMethod.HEAD)
+											.response()
+											.firstHeader("Content-Length")
+											.orElse("0")));
+		} catch (@SuppressWarnings("unused") Exception e) {
 			return 0L;
 		}
 	}
 
-	public IndexOutput createOutput(final String name) throws IOException {
+	IndexOutput createOutput(final String name) throws IOException {
 		IndexOutput indexOutput;
 		try {
-			indexOutput = new S3RAMIndexOutput(this, name);
+			indexOutput
+					= new ByteBuffersIndexOutput(
+							new ByteBuffersDataOutput(),
+							getClass().getSimpleName()
+							+ "IndexOutput{bucket="
+							+ bucket
+							+ ", path="
+							+ path
+							+ ", name="
+							+ name
+							+ "}",
+							name,
+							new CRC32(),
+							localOutput -> {
+								byte[] bytes = localOutput.toArrayCopy();
+								getFileSizes().put(name, Integer.valueOf(bytes.length).longValue());
+								s3.path(bucket, getPath() + name)
+										.method(HttpMethod.PUT)
+										.requestBody(bytes)
+										.execute();
+							});
 		} catch (final Exception e) {
-			throw new S3StoreException("Failed to create indexOutput instance [" + S3RAMIndexOutput.class + "]", e);
+			throw new S3StoreException(
+					"Failed to create indexOutput instance [" + ByteBuffersIndexOutput.class + "]", e);
 		}
 		return indexOutput;
 	}
 
 	@Override
 	public IndexOutput createOutput(final String name, final IOContext context) throws IOException {
+		if (closed) {
+			throw new AlreadyClosedException("Already closed.");
+		}
+		if (fileExists(name)) {
+			throw new FileAlreadyExistsException("File " + name + " already exists.");
+		}
 		if (isStaticFile(name)) {
-			// TODO is necessary??
-			logger.warn("S3Directory.createOutput({}), is static file", name);
 			forceDeleteFile(name);
 		}
+		return createOutput(name);
+	}
+
+	@Override
+	public IndexOutput createTempOutput(String prefix, String suffix, IOContext context)
+			throws IOException {
+		ensureOpen();
+		String name = IndexFileNames.segmentFileName(prefix, tempFileName.apply(suffix), "tmp");
 		return createOutput(name);
 	}
 
@@ -323,69 +452,164 @@ public class S3Directory extends Directory {
 	public IndexInput openInput(final String name, final IOContext context) throws IOException {
 		IndexInput indexInput;
 		try {
-			indexInput = new S3FetchOnBufferReadIndexInput(this, name);
+			indexInput
+					= new BufferedIndexInput(name) {
+				private long totalLength = -1;
+				private long position = 0;
+
+				@Override
+				protected void readInternal(ByteBuffer bb) throws IOException {
+					ResponseInputStream res = s3.path(bucket, getPath() + name).responseInputStream();
+					if (totalLength == -1) {
+						totalLength = Long.parseLong(res.header("Content-Length").orElse("0"));
+					}
+					final long curPos = getFilePointer();
+					if (curPos + bb.remaining() > totalLength) {
+						throw new EOFException("read past EOF: " + this);
+					}
+					if (curPos != position) {
+						position = curPos;
+					}
+					res.skip(position);
+					res.read(bb.array(), bb.arrayOffset(), bb.capacity());
+					// position += bb.capacity();
+					bb.position(bb.position() + bb.remaining());
+				}
+
+				@Override
+				protected void seekInternal(final long pos) throws IOException {
+					if (pos < 0) {
+						throw new IllegalArgumentException("Seek position cannot be negative");
+					}
+					if (pos > length()) {
+						throw new EOFException("Seek position is past EOF");
+					}
+					position = pos;
+				}
+
+				@Override
+				public void close() {
+				}
+
+				@Override
+				public synchronized long length() {
+					if (totalLength == -1) {
+						try {
+							totalLength = fileLength(name);
+						} catch (@SuppressWarnings("unused") Exception e) {
+							// do nothing here for now, much better for performance
+						}
+					}
+					return totalLength;
+				}
+			};
 		} catch (final Exception e) {
-			throw new S3StoreException("Failed to create indexInput [" + S3FetchOnBufferReadIndexInput.class + "]", e);
+			throw new S3StoreException(
+					"Failed to create indexInput [" + BufferedIndexInput.class + "]", e);
 		}
 		return indexInput;
 	}
 
 	@Override
 	public void sync(final Collection<String> names) throws IOException {
-		logger.debug("S3Directory.sync({})", names);
 		for (final String name : names) {
-			if (!fileExists(name)) {
+			if (!getFileSizes().containsKey(name)) {
 				throw new S3StoreException("Failed to sync, file " + name + " not found");
 			}
 		}
 	}
 
 	@Override
-	public void rename(final String from, final String to) throws IOException {
+	public void rename(final String from, final String to) throws FileNotFoundException {
 		renameFile(from, to);
 	}
 
 	@Override
-	public Lock obtainLock(final String name) throws IOException {
+	public Lock obtainLock(final String name) throws IOException, LockObtainFailedException {
 		return lockFactory.obtainLock(this, name);
 	}
 
 	@Override
-	public void close() throws IOException {
-	}
-
-	@Override
-	public IndexOutput createTempOutput(String prefix, String suffix, IOContext context) throws IOException {
-		String name = prefix.concat("_temp_").concat(suffix).concat(".tmp");
-		if (isStaticFile(name)) {
-			// TODO is necessary??
-			logger.warn("S3Directory.createOutput({}), is static file", name);
-			forceDeleteFile(name);
-		}
-		return createOutput(name);
+	public synchronized void close() {
+		this.closed = true;
 	}
 
 	@Override
 	public void syncMetaData() throws IOException {
 	}
 
+	private final Function<String, String> tempFileName
+			= new Function<String, String>() {
+		private final AtomicLong counter = new AtomicLong();
+
+		@Override
+		public String apply(String suffix) {
+			return suffix + "_" + Long.toString(counter.getAndIncrement(), Character.MAX_RADIX);
+		}
+	};
+
 	/**
 	 * Returns if this file name is a static file. A static file is a file that is updated and changed by Lucene.
 	 */
 	private boolean isStaticFile(final String name) {
-		return name.equals(IndexFileNames.SEGMENTS) || name.equals(IndexFileNames.PENDING_SEGMENTS) ||
-				name.equals("clearcache") || name.equals("spellcheck.version");
+		return name.equals(IndexFileNames.SEGMENTS)
+				|| name.equals(IndexFileNames.PENDING_SEGMENTS)
+				|| name.equals("clearcache")
+				|| name.equals("spellcheck.version");
 	}
 
 	/**
-	 * *********************************************************************************************
-	 * SETTER/GETTERS METHODS
-	 * *********************************************************************************************
+	 * Returns the MD5 in base64 for the given byte array.
+	 * @return md5 string encoded in base64.
+	 */
+	public static String md5AsBase64(byte[] input) {
+		try {
+			MessageDigest md = MessageDigest.getInstance("MD5");
+			return toBase64(md.digest(input));
+		} catch (NoSuchAlgorithmException e) {
+			// should never get here
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/**
+	 * Converts byte data to a Base64-encoded string.
+	 *
+	 * @param data
+	 * <p>
+	 * data to Base64 encode.
+	 * @return encoded Base64 string.
+	 */
+	public static String toBase64(byte[] data) {
+		return data == null ? null : new String(toBase64Bytes(data), StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Converts byte data to a Base64-encoded string.
+	 *
+	 * @param data
+	 * <p>
+	 * data to Base64 encode.
+	 * @return encoded Base64 string.
+	 */
+	public static byte[] toBase64Bytes(byte[] data) {
+		return data == null ? null : Base64.getEncoder().encode(data);
+	}
+
+	/**
+	 * The S3 bucket name.
+	 *
+	 * @return S3 bucket name.
 	 */
 	public String getBucket() {
 		return bucket;
 	}
 
+	/**
+	 * Returns the path prefix (subfolder) for the index storage location.
+	 *
+	 * @return a path prefix.
+	 */
 	public String getPath() {
 		if (path == null) {
 			path = "";
@@ -393,30 +617,33 @@ public class S3Directory extends Directory {
 		return path;
 	}
 
-	public S3Client getS3() {
+	/**
+	 * The S3 client object.
+	 *
+	 * @return S3 client
+	 */
+	protected Client getS3() {
 		return s3;
 	}
 
-	public ConcurrentHashMap<String, Long> getFileSizes() {
+	private ConcurrentHashMap<String, Long> getFileSizes() {
 		return fileSizes;
 	}
 
 	@Override
-	public Set<String> getPendingDeletions() throws IOException {
+	public Set<String> getPendingDeletions() {
 		return Collections.emptySet();
 	}
 
 	/**
 	 * A nestable checked S3 exception.
-	 *
-	 * @author kimchy
 	 */
-	final static class S3StoreException extends IOException {
+	static final class S3StoreException extends IOException {
 
 		private static final long serialVersionUID = 6238846660780283933L;
 
 		/**
-		 * Root cause of this nested exception
+		 * Root cause of this nested exception.
 		 */
 		private Throwable cause;
 
@@ -425,7 +652,7 @@ public class S3Directory extends Directory {
 		 *
 		 * @param msg the detail message
 		 */
-		public S3StoreException(final String msg) {
+		S3StoreException(final String msg) {
 			super(msg);
 		}
 
@@ -435,7 +662,7 @@ public class S3Directory extends Directory {
 		 * @param msg the detail message
 		 * @param ex the nested exception
 		 */
-		public S3StoreException(final String msg, final Throwable ex) {
+		S3StoreException(final String msg, final Throwable ex) {
 			super(msg);
 			cause = ex;
 		}
@@ -451,832 +678,5 @@ public class S3Directory extends Directory {
 			// remoting deserializer like Hessian's.
 			return cause == this ? null : cause;
 		}
-
-		/**
-		 * Return the detail message, including the message from the nested exception if there is one.
-		 */
-		@Override
-		public String getMessage() {
-			if (getCause() == null) {
-				return super.getMessage();
-			} else {
-				return super.getMessage() + "; nested exception is " + getCause().getClass().getName() + ": "
-						+ getCause().getMessage();
-			}
-		}
-
-		/**
-		 * Print the composite message and the embedded stack trace to the specified stream.
-		 *
-		 * @param ps the print stream
-		 */
-		@Override
-		public void printStackTrace(final PrintStream ps) {
-			if (getCause() == null) {
-				super.printStackTrace(ps);
-			} else {
-				ps.println(this);
-				getCause().printStackTrace(ps);
-			}
-		}
-
-		/**
-		 * Print the composite message and the embedded stack trace to the specified print writer.
-		 *
-		 * @param pw the print writer
-		 */
-		@Override
-		public void printStackTrace(final PrintWriter pw) {
-			if (getCause() == null) {
-				super.printStackTrace(pw);
-			} else {
-				pw.println(this);
-				getCause().printStackTrace(pw);
-			}
-		}
 	}
-
-	/**
-	 * An <code>IndexInput</code> implementation, that for every buffer refill will go and fetch the data from the
-	 * database.
-	 *
-	 * @author kimchy
-	 */
-	class S3FetchOnBufferReadIndexInput extends ConfigurableBufferedIndexInput {
-
-		private static final Logger logger = LoggerFactory.getLogger(S3FetchOnBufferReadIndexInput.class);
-
-		private final String name;
-
-		// lazy intialize the length
-		private long totalLength = -1;
-
-		private long position = 0;
-
-		private final S3Directory s3Directory;
-
-		public S3FetchOnBufferReadIndexInput(final S3Directory s3Directory, final String name) {
-			super("FetchOnBufferReadS3IndexInput", BUFFER_SIZE);
-			this.s3Directory = s3Directory;
-			this.name = name;
-		}
-
-		// Overriding refill here since we can execute a single query to get both
-		// the length and the buffer data
-		// resulted in not the nicest OO design, where the buffer information is
-		// protected in the S3BufferedIndexInput class
-		// and code duplication between this method and S3BufferedIndexInput.
-		// Performance is much better this way!
-		@Override
-		protected void refill() throws IOException {
-			if (logger.isDebugEnabled()) {
-				logger.info("refill({})", name);
-			}
-			ResponseInputStream<GetObjectResponse> res = s3Directory.getS3().
-					getObject(b -> b.bucket(s3Directory.getBucket()).key(getPath() + name));
-
-			synchronized (this) {
-				if (totalLength == -1) {
-					totalLength = res.response().contentLength();
-				}
-			}
-
-			final long start = bufferStart + bufferPosition;
-			long end = start + bufferSize;
-			if (end > length()) {
-				end = length();
-			}
-			bufferLength = (int) (end - start);
-			if (bufferLength <= 0) {
-				throw new IOException("read past EOF");
-			}
-
-			if (buffer == null) {
-				buffer = new byte[bufferSize]; // allocate buffer
-				// lazily
-				seekInternal(bufferStart);
-			}
-			// START replace read internal
-			readInternal(res, buffer, 0, bufferLength);
-
-			bufferStart = start;
-			bufferPosition = 0;
-		}
-
-		@Override
-		protected synchronized void readInternal(final byte[] b, final int offset, final int length) throws IOException {
-			if (logger.isDebugEnabled()) {
-				logger.info("readInternal({})", name);
-			}
-			ResponseInputStream<GetObjectResponse> res = s3Directory.getS3().
-					getObject(bd -> bd.bucket(s3Directory.getBucket()).key(getPath() + name));
-
-			if (buffer == null) {
-				buffer = new byte[bufferSize];
-				seekInternal(bufferStart);
-			}
-			readInternal(res, b, 0, bufferLength);
-
-			if (totalLength == -1) {
-				totalLength = res.response().contentLength();
-			}
-		}
-
-		private synchronized void readInternal(final ResponseInputStream<GetObjectResponse> res,
-				final byte[] b, final int offset, final int length) throws IOException {
-			final long curPos = getFilePointer();
-			if (curPos != position) {
-				position = curPos;
-			}
-			res.skip(position);
-			res.read(b, offset, length);
-			position += length;
-		}
-
-		@Override
-		protected void seekInternal(final long pos) throws IOException {
-			synchronized (this) {
-				if (pos < 0) {
-					throw new IllegalArgumentException("Seek position cannot be negative");
-				}
-				if (pos > length()) {
-					throw new EOFException("Seek position is past EOF");
-				}
-				logger.info("Name: " + name + " Seeking to position: " + pos);
-				position = pos;
-			}
-		}
-
-		@Override
-		public void close() throws IOException {
-		}
-
-		@Override
-		public synchronized long length() {
-			if (totalLength == -1) {
-				try {
-					totalLength = s3Directory.fileLength(name);
-				} catch (final IOException e) {
-					// do nothing here for now, much better for performance
-				}
-			}
-			return totalLength;
-		}
-
-		@Override
-		public IndexInput slice(final String sliceDescription, final long offset, final long length) throws IOException {
-			// TODO Auto-generated method stub
-			logger.debug("FetchOnBufferReadS3IndexInput.slice()");
-
-			return new SlicedIndexInput(sliceDescription, this, offset, length);
-		}
-
-		/**
-		 * Implementation of an IndexInput that reads from a portion of a file.
-		 */
-		private static final class SlicedIndexInput extends BufferedIndexInput {
-
-			IndexInput base;
-			long fileOffset;
-			long length;
-
-			SlicedIndexInput(final String sliceDescription, final IndexInput base, final long offset, final long length) {
-				super(sliceDescription == null ? base.toString() : base.toString() + " [slice=" + sliceDescription + "]",
-						BufferedIndexInput.BUFFER_SIZE);
-				if (offset < 0 || length < 0 || offset + length > base.length()) {
-					throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + base);
-				}
-				this.base = base.clone();
-				fileOffset = offset;
-				this.length = length;
-			}
-
-			@Override
-			public SlicedIndexInput clone() {
-				final SlicedIndexInput clone = (SlicedIndexInput) super.clone();
-				clone.base = base.clone();
-				clone.fileOffset = fileOffset;
-				clone.length = length;
-				return clone;
-			}
-
-			@Override
-			protected void readInternal(ByteBuffer bb) throws IOException {
-				long start = getFilePointer();
-				if (start + bb.remaining() > length) {
-					throw new EOFException("read past EOF: " + this);
-				}
-				base.seek(fileOffset + start);
-				base.readBytes(bb.array(), bb.position(), bb.remaining());
-				bb.position(bb.position() + bb.remaining());
-			}
-
-			@Override
-			protected void seekInternal(final long pos) {
-			}
-
-			@Override
-			public void close() throws IOException {
-				base.close();
-			}
-
-			@Override
-			public long length() {
-				return length;
-			}
-		}
-
-	}
-
-	/**
-	 * A simple base class that performs index input memory based buffering. Allows the buffer size to be configurable.
-	 *
-	 * @author kimchy
-	 */
-	// NEED TO BE MONITORED AGAINST LUCENE (EXATCLY THE SAME)
-	abstract class ConfigurableBufferedIndexInput extends IndexInput {
-
-		protected ConfigurableBufferedIndexInput(final String resourceDescription, final int bufferSize) {
-			super(resourceDescription);
-			checkBufferSize(bufferSize);
-			this.bufferSize = bufferSize;
-		}
-
-		/**
-		 * Default buffer size
-		 */
-		public static final int BUFFER_SIZE = 1024;
-
-		protected int bufferSize = BUFFER_SIZE;
-
-		protected byte[] buffer;
-
-		protected long bufferStart = 0; // position in file of buffer
-		protected int bufferLength = 0; // end of valid bytes
-		protected int bufferPosition = 0; // next byte to read
-
-		@Override
-		public byte readByte() throws IOException {
-			if (bufferPosition >= bufferLength) {
-				refill();
-			}
-			return buffer[bufferPosition++];
-		}
-
-		/**
-		 * Change the buffer size used by this IndexInput
-		 */
-		public void setBufferSize(final int newSize) {
-			assert buffer == null || bufferSize == buffer.length;
-			if (newSize != bufferSize) {
-				checkBufferSize(newSize);
-				bufferSize = newSize;
-				if (buffer != null) {
-					// Resize the existing buffer and carefully save as
-					// many bytes as possible starting from the current
-					// bufferPosition
-					final byte[] newBuffer = new byte[newSize];
-					final int leftInBuffer = bufferLength - bufferPosition;
-					final int numToCopy;
-					if (leftInBuffer > newSize) {
-						numToCopy = newSize;
-					} else {
-						numToCopy = leftInBuffer;
-					}
-					System.arraycopy(buffer, bufferPosition, newBuffer, 0, numToCopy);
-					bufferStart += bufferPosition;
-					bufferPosition = 0;
-					bufferLength = numToCopy;
-					buffer = newBuffer;
-				}
-			}
-		}
-
-		/**
-		 * Returns buffer size. @see #setBufferSize
-		 */
-		public int getBufferSize() {
-			return bufferSize;
-		}
-
-		private void checkBufferSize(final int bufferSize) {
-			if (bufferSize <= 0) {
-				throw new IllegalArgumentException("bufferSize must be greater than 0 (got " + bufferSize + ")");
-			}
-		}
-
-		@Override
-		public void readBytes(final byte[] b, int offset, int len) throws IOException {
-			if (len <= bufferLength - bufferPosition) {
-				// the buffer contains enough data to satistfy this request
-				if (len > 0) {
-					System.arraycopy(buffer, bufferPosition, b, offset, len);
-				}
-				bufferPosition += len;
-			} else {
-				// the buffer does not have enough data. First serve all we've got.
-				final int available = bufferLength - bufferPosition;
-				if (available > 0) {
-					System.arraycopy(buffer, bufferPosition, b, offset, available);
-					offset += available;
-					len -= available;
-					bufferPosition += available;
-				}
-				// and now, read the remaining 'len' bytes:
-				if (len < bufferSize) {
-					// If the amount left to read is small enough, do it in the
-					// usual
-					// buffered way: fill the buffer and copy from it:
-					refill();
-					if (bufferLength < len) {
-						// Throw an exception when refill() could not read len
-						// bytes:
-						System.arraycopy(buffer, 0, b, offset, bufferLength);
-						throw new IOException("read past EOF");
-					} else {
-						System.arraycopy(buffer, 0, b, offset, len);
-						bufferPosition = len;
-					}
-				} else {
-					// The amount left to read is larger than the buffer - there's
-					// no
-					// performance reason not to read it all at once. Note that
-					// unlike
-					// the previous code of this function, there is no need to do a
-					// seek
-					// here, because there's no need to reread what we had in the
-					// buffer.
-					final long after = bufferStart + bufferPosition + len;
-					if (after > length()) {
-						throw new IOException("read past EOF");
-					}
-					readInternal(b, offset, len);
-					bufferStart = after;
-					bufferPosition = 0;
-					bufferLength = 0; // trigger refill() on read
-				}
-			}
-		}
-
-		protected void refill() throws IOException {
-			final long start = bufferStart + bufferPosition;
-			long end = start + bufferSize;
-			if (end > length()) {
-				end = length();
-			}
-			bufferLength = (int) (end - start);
-			if (bufferLength <= 0) {
-				throw new IOException("read past EOF");
-			}
-
-			if (buffer == null) {
-				buffer = new byte[bufferSize]; // allocate buffer lazily
-				seekInternal(bufferStart);
-			}
-			readInternal(buffer, 0, bufferLength);
-
-			bufferStart = start;
-			bufferPosition = 0;
-		}
-
-		/**
-		 * Expert: implements buffer refill. Reads bytes from the current position in the input.
-		 *
-		 * @param b the array to read bytes into
-		 * @param offset the offset in the array to start storing bytes
-		 * @param length the number of bytes to read
-		 */
-		protected abstract void readInternal(byte[] b, int offset, int length) throws IOException;
-
-		@Override
-		public long getFilePointer() {
-			return bufferStart + bufferPosition;
-		}
-
-		@Override
-		public void seek(final long pos) throws IOException {
-			if (pos >= bufferStart && pos < bufferStart + bufferLength) {
-				bufferPosition = (int) (pos - bufferStart); // seek within buffer
-			} else {
-				bufferStart = pos;
-				bufferPosition = 0;
-				bufferLength = 0; // trigger refill() on read()
-				seekInternal(pos);
-			}
-		}
-
-		/**
-		 * Expert: implements seek. Sets current position in this file, where the next
-		 * {@link #readInternal(byte[],int,int)} will occur.
-		 *
-		 * @see #readInternal(byte[],int,int)
-		 */
-		protected abstract void seekInternal(long pos) throws IOException;
-
-		@Override
-		public IndexInput clone() {
-			final ConfigurableBufferedIndexInput clone = (ConfigurableBufferedIndexInput) super.clone();
-
-			clone.buffer = null;
-			clone.bufferLength = 0;
-			clone.bufferPosition = 0;
-			clone.bufferStart = getFilePointer();
-
-			return clone;
-		}
-
-	}
-
-	/**
-	 * An <code>IndexOutput</code> implementation that initially writes the data to a memory buffer. Once it exceeds the
-	 * configured threshold ( {@link #INDEX_OUTPUT_THRESHOLD_SETTING}, will start working with a temporary file,
-	 * releasing the previous buffer.
-	 *
-	 * @author kimchy
-	 */
-	class S3RAMIndexOutput extends IndexOutput {
-
-		private RAMIndexOutput ramIndexOutput;
-		private final Checksum crc;
-		private final S3Directory s3Directory;
-
-		public S3RAMIndexOutput(final S3Directory s3Directory, final String name) {
-			super("RAMAndFileS3IndexOutput", name);
-			this.crc = new BufferedChecksum(new CRC32());
-			this.s3Directory = s3Directory;
-			this.ramIndexOutput = new RAMIndexOutput(s3Directory, name);
-		}
-
-		@Override
-		public void writeByte(final byte b) throws IOException {
-			ramIndexOutput.writeByte(b);
-			crc.update(b);
-		}
-
-		@Override
-		public void writeBytes(final byte[] b, final int offset, final int length) throws IOException {
-			ramIndexOutput.writeBytes(b, offset, length);
-			crc.update(b, offset, length);
-		}
-
-		@Override
-		public void close() throws IOException {
-			ramIndexOutput.close();
-		}
-
-		@Override
-		public long getFilePointer() {
-			return ramIndexOutput.getFilePointer();
-		}
-
-		@Override
-		public long getChecksum() throws IOException {
-			return crc.getValue();
-		}
-
-		/**
-		 * An <code>IndexOutput</code> implementation that stores all the data written to it in memory, and flushes it
-		 * to the database when the output is closed.
-		 * <p/>
-		 * Useful for small file entries like the segment file.
-		 *
-		 * @author kimchy
-		 */
-		class RAMIndexOutput extends ConfigurableBufferedIndexOutput {
-
-			private final Logger logger = LoggerFactory.getLogger(S3RAMIndexOutput.class);
-			private final RAMFile file;
-			private final String name;
-			private final S3Directory s3Directory;
-
-			public RAMIndexOutput(final S3Directory s3Directory, final String name) {
-				super("RAMS3IndexOutput");
-				file = new RAMFile();
-				this.name = name;
-				this.s3Directory = s3Directory;
-				initBuffer(bufferSize);
-			}
-
-			private class RAMFile {
-
-				ArrayList<byte[]> buffers = new ArrayList<byte[]>();
-				long length;
-			}
-
-			private class RAMInputStream extends InputStream {
-
-				private long position;
-
-				private int buffer;
-
-				private int bufferPos;
-
-				private long markedPosition;
-
-				@Override
-				public synchronized void reset() throws IOException {
-					position = markedPosition;
-				}
-
-				@Override
-				public boolean markSupported() {
-					return true;
-				}
-
-				@Override
-				public void mark(final int readlimit) {
-					markedPosition = position;
-				}
-
-				@Override
-				public int read(final byte[] dest, int destOffset, final int len) throws IOException {
-					if (position == file.length) {
-						return -1;
-					}
-					int remainder = (int) (position + len > file.length ? file.length - position : len);
-					final long oldPosition = position;
-					while (remainder != 0) {
-						if (bufferPos == bufferSize) {
-							bufferPos = 0;
-							buffer++;
-						}
-						int bytesToCopy = bufferSize - bufferPos;
-						bytesToCopy = bytesToCopy >= remainder ? remainder : bytesToCopy;
-						final byte[] buf = file.buffers.get(buffer);
-						System.arraycopy(buf, bufferPos, dest, destOffset, bytesToCopy);
-						destOffset += bytesToCopy;
-						position += bytesToCopy;
-						bufferPos += bytesToCopy;
-						remainder -= bytesToCopy;
-					}
-					return (int) (position - oldPosition);
-				}
-
-				@Override
-				public int read() throws IOException {
-					if (position == file.length) {
-						return -1;
-					}
-					if (bufferPos == bufferSize) {
-						bufferPos = 0;
-						buffer++;
-					}
-					final byte[] buf = file.buffers.get(buffer);
-					position++;
-					return buf[bufferPos++] & 0xFF;
-				}
-			}
-
-			private int pointer = 0;
-
-			@Override
-			public void flushBuffer(final byte[] src, final int offset, final int len) {
-				byte[] buffer;
-				int bufferPos = offset;
-				while (bufferPos != len) {
-					final int bufferNumber = pointer / bufferSize;
-					final int bufferOffset = pointer % bufferSize;
-					final int bytesInBuffer = bufferSize - bufferOffset;
-					final int remainInSrcBuffer = len - bufferPos;
-					final int bytesToCopy = bytesInBuffer >= remainInSrcBuffer ? remainInSrcBuffer : bytesInBuffer;
-
-					if (bufferNumber == file.buffers.size()) {
-						buffer = new byte[bufferSize];
-						file.buffers.add(buffer);
-					} else {
-						buffer = file.buffers.get(bufferNumber);
-					}
-
-					System.arraycopy(src, bufferPos, buffer, bufferOffset, bytesToCopy);
-					bufferPos += bytesToCopy;
-					pointer += bytesToCopy;
-				}
-
-				if (pointer > file.length) {
-					file.length = pointer;
-				}
-			}
-
-			protected InputStream openInputStream() throws IOException {
-				return new RAMInputStream();
-			}
-
-			protected void doAfterClose() throws IOException {
-			}
-
-			protected void doBeforeClose() throws IOException {
-			}
-
-			@Override
-			public void seek(final long pos) throws IOException {
-				super.seek(pos);
-				pointer = (int) pos;
-			}
-
-			@Override
-			public long length() {
-				return file.length;
-			}
-
-			public void flushToIndexOutput(final IndexOutput indexOutput) throws IOException {
-				super.flush();
-				if (file.buffers.isEmpty()) {
-					return;
-				}
-				if (file.buffers.size() == 1) {
-					indexOutput.writeBytes(file.buffers.get(0), (int) file.length);
-					return;
-				}
-				final int tempSize = file.buffers.size() - 1;
-				int i;
-				for (i = 0; i < tempSize; i++) {
-					indexOutput.writeBytes(file.buffers.get(i), bufferSize);
-				}
-				final int leftOver = (int) (file.length % bufferSize);
-				if (leftOver == 0) {
-					indexOutput.writeBytes(file.buffers.get(i), bufferSize);
-				} else {
-					indexOutput.writeBytes(file.buffers.get(i), leftOver);
-				}
-			}
-
-			@Override
-			public long getChecksum() throws IOException {
-				// TODO Auto-generated method stub
-				logger.debug("RAMS3IndexOutput.getChecksum()");
-				return 0;
-			}
-
-			@Override
-			public void close() throws IOException {
-				super.close();
-				doBeforeClose();
-				try {
-					if (logger.isDebugEnabled()) {
-						logger.info("close({})", name);
-					}
-					final InputStream is = openInputStream();
-					s3Directory.getFileSizes().put(name, length());
-					s3Directory.getS3().putObject(b -> b.bucket(s3Directory.getBucket()).key(getPath() + name),
-							RequestBody.fromInputStream(is, length()));
-				} catch (Exception e) {
-					logger.error(null, e);
-				}
-				doAfterClose();
-			}
-
-		}
-
-		/**
-		 * A simple base class that performs index output memory based buffering. The buffer size if configurable.
-		 *
-		 * @author kimchy
-		 */
-		// NEED TO BE MONITORED AGAINST LUCENE
-		abstract class ConfigurableBufferedIndexOutput extends IndexOutput {
-
-			public static final int DEFAULT_BUFFER_SIZE = 16384;
-
-			private byte[] buffer;
-			private long bufferStart = 0; // position in file of buffer
-			private int bufferPosition = 0; // position in buffer
-
-			protected int bufferSize = DEFAULT_BUFFER_SIZE;
-
-			protected ConfigurableBufferedIndexOutput(final String resourceDescription) {
-				super(resourceDescription, "ConfigurableBufferedIndexOutput");
-			}
-
-			protected void initBuffer(final int bufferSize) {
-				this.bufferSize = bufferSize;
-				buffer = new byte[bufferSize];
-			}
-
-			/**
-			 * Writes a single byte.
-			 *
-			 * @see org.apache.lucene.store.IndexInput#readByte()
-			 */
-			@Override
-			public void writeByte(final byte b) throws IOException {
-				if (bufferPosition >= bufferSize) {
-					flush();
-				}
-				buffer[bufferPosition++] = b;
-			}
-
-			/**
-			 * Writes an array of bytes.
-			 *
-			 * @param b the bytes to write
-			 * @param length the number of bytes to write
-			 * @see org.apache.lucene.store.IndexInput#readBytes(byte[],int,int)
-			 */
-			@Override
-			public void writeBytes(final byte[] b, final int offset, final int length) throws IOException {
-				int bytesLeft = bufferSize - bufferPosition;
-				// is there enough space in the buffer?
-				if (bytesLeft >= length) {
-					// we add the data to the end of the buffer
-					System.arraycopy(b, offset, buffer, bufferPosition, length);
-					bufferPosition += length;
-					// if the buffer is full, flush it
-					if (bufferSize - bufferPosition == 0) {
-						flush();
-					}
-				} else {
-					// is data larger then buffer?
-					if (length > bufferSize) {
-						// we flush the buffer
-						if (bufferPosition > 0) {
-							flush();
-						}
-						// and write data at once
-						flushBuffer(b, offset, length);
-						bufferStart += length;
-					} else {
-						// we fill/flush the buffer (until the input is written)
-						int pos = 0; // position in the input data
-						int pieceLength;
-						while (pos < length) {
-							pieceLength = length - pos < bytesLeft ? length - pos : bytesLeft;
-							System.arraycopy(b, pos + offset, buffer, bufferPosition, pieceLength);
-							pos += pieceLength;
-							bufferPosition += pieceLength;
-							// if the buffer is full, flush it
-							bytesLeft = bufferSize - bufferPosition;
-							if (bytesLeft == 0) {
-								flush();
-								bytesLeft = bufferSize;
-							}
-						}
-					}
-				}
-			}
-
-			/**
-			 * Forces any buffered output to be written.
-			 */
-			public void flush() throws IOException {
-				flushBuffer(buffer, bufferPosition);
-				bufferStart += bufferPosition;
-				bufferPosition = 0;
-			}
-
-			/**
-			 * Expert: implements buffer write. Writes bytes at the current position in the output.
-			 *
-			 * @param b the bytes to write
-			 * @param len the number of bytes to write
-			 */
-			private void flushBuffer(final byte[] b, final int len) throws IOException {
-				flushBuffer(b, 0, len);
-			}
-
-			/**
-			 * Expert: implements buffer write. Writes bytes at the current position in the output.
-			 *
-			 * @param b the bytes to write
-			 * @param offset the offset in the byte array
-			 * @param len the number of bytes to write
-			 */
-			protected abstract void flushBuffer(byte[] b, int offset, int len) throws IOException;
-
-			/**
-			 * Closes this stream to further operations.
-			 */
-			@Override
-			public void close() throws IOException {
-				flush();
-			}
-
-			/**
-			 * Returns the current position in this file, where the next write will occur.
-			 *
-			 * @see #seek(long)
-			 */
-			@Override
-			public long getFilePointer() {
-				return bufferStart + bufferPosition;
-			}
-
-			/**
-			 * Sets current position in this file, where the next write will occur.
-			 *
-			 * @see #getFilePointer()
-			 */
-			public void seek(final long pos) throws IOException {
-				flush();
-				bufferStart = pos;
-			}
-
-			/**
-			 * The number of bytes in the file.
-			 */
-			public abstract long length() throws IOException;
-
-		}
-
-	}
-
 }
