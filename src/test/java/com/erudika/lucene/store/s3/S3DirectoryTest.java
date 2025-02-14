@@ -370,12 +370,8 @@ public class S3DirectoryTest { //extends BaseDirectoryTestCase {
 	}
 
 	protected Directory getDirectory(Path path) throws IOException {
-		S3Directory dir = new S3Directory(s3, TEST_BUCKET + "-" + path.getFileName(), "");
-		try {
-			dir.create();
-		} catch (InterruptedException ex) {
-			throw new RuntimeException(ex);
-		}
+		S3Directory dir = new S3Directory(s3, TEST_BUCKET, path.getFileName().toString());
+		dir.create();
 		return dir;
 	}
 }
