@@ -332,7 +332,7 @@ public class S3DirectoryTest { //extends BaseDirectoryTestCase {
 		}
 		final byte[] test = new byte[]{1, 2, 3, 4, 5, 6, 7, 8};
 		try (IndexOutput indexOutput
-				= s3Directory.createOutput("value1", new IOContext(new FlushInfo(0, 0)))) {
+				= s3Directory.createOutput("value1", IOContext.flush(new FlushInfo(0, 0)))) {
 			indexOutput.writeInt(-1);
 			indexOutput.writeLong(10);
 			indexOutput.writeInt(0);
@@ -350,7 +350,7 @@ public class S3DirectoryTest { //extends BaseDirectoryTestCase {
 		assertEquals(36, s3Directory.fileLength("value1"));
 
 		try (IndexInput indexInput
-				= s3Directory.openInput("value1", new IOContext(new FlushInfo(0, 0)))) {
+				= s3Directory.openInput("value1", IOContext.flush(new FlushInfo(0, 0)))) {
 			assertEquals(-1, indexInput.readInt());
 			assertEquals(10, indexInput.readLong());
 			assertEquals(0, indexInput.readInt());
