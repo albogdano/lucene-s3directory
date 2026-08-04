@@ -346,25 +346,30 @@ public class S3Directory extends Directory {
 	public String[] listAll() {
 		final LinkedList<String> names = new LinkedList<>();
 		Optional<String> continuationToken = Optional.empty();
-		Optional<String> prefix = Optional.ofNullable(getPath().isBlank() ? null : getPath());
+		String prefix = getPath();
+		Optional<String> prefixOpt = prefix.isBlank() ? Optional.empty() : Optional.of(prefix);
 		do {
 			Request req = s3.path(bucket).method(HttpMethod.GET).query("list-type", "2");
 
-			prefix.ifPresent(p -> req.query("prefix", p));
+			prefixOpt.ifPresent(p -> req.query("prefix", p));
 			continuationToken.ifPresent(c -> req.query("continuation-token", c));
 
 			XmlElement res = req.responseAsXml();
 
 			for (XmlElement s3Object : res.childrenWithName("Contents")) {
-				names.add(s3Object.content("Key"));
+				String key = s3Object.content("Key");
+				if (prefix.length() > 0) {
+					key = key.substring(prefix.length());
+				}
+				if (!key.equals(IndexWriter.WRITE_LOCK_NAME)) {
+					names.add(key);
+				}
 			}
 			if (res.hasChildren() && !res.childrenWithName("NextContinuationToken").isEmpty()) {
 				continuationToken = Optional.ofNullable(res.child("NextContinuationToken").content());
 			}
 		} while (continuationToken.isPresent());
-		return names.stream()
-				.filter(k -> !k.equals(IndexWriter.WRITE_LOCK_NAME))
-				.toArray(String[]::new);
+		return names.toArray(String[]::new);
 	}
 
 	@Override
