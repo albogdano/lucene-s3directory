@@ -37,7 +37,7 @@ The package is available on Maven Central:
 <dependency>
   <groupId>com.erudika</groupId>
   <artifactId>lucene-s3directory</artifactId>
-  <version>1.0.1</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
