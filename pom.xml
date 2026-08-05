@@ -53,8 +53,8 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<skipTests>false</skipTests>
-		<lucene.version>10.3.1</lucene.version>
-		<slf4j.version>2.0.17</slf4j.version>
+		<lucene.version>10.5.0</lucene.version>
+		<slf4j.version>2.0.18</slf4j.version>
 		<junit.version>4.13.2</junit.version>
 		<mockito.version>1.10.19</mockito.version>
 		<log4j.version>2.24.3</log4j.version>
@@ -75,26 +75,26 @@
 		<dependency>
 			<groupId>com.github.davidmoten</groupId>
 			<artifactId>aws-lightweight-client-java</artifactId>
-			<version>0.1.24</version>
+			<version>0.1.25</version>
 		</dependency>
 
 		<!-- TESTING -->
 		<dependency>
 			<groupId>org.mockito</groupId>
 			<artifactId>mockito-core</artifactId>
-			<version>5.20.0</version>
+			<version>5.23.0</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter-api</artifactId>
-			<version>6.0.1</version>
+			<version>6.1.2</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter-engine</artifactId>
-			<version>6.0.1</version>
+			<version>6.1.2</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -112,7 +112,7 @@
 		<dependency>
 			<groupId>com.adobe.testing</groupId>
 			<artifactId>s3mock</artifactId>
-			<version>4.10.0</version>
+			<version>5.1.0</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -122,7 +122,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.14.1</version>
+				<version>3.15.0</version>
 				<configuration>
 					<encoding>${project.build.sourceEncoding}</encoding>
 				 <release>21</release>
@@ -162,7 +162,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-release-plugin</artifactId>
-				<version>3.2.0</version>
+				<version>3.3.1</version>
 				<configuration>
 					<autoVersionSubmodules>true</autoVersionSubmodules>
 					<mavenExecutorId>forked-path</mavenExecutorId>
@@ -175,7 +175,7 @@
 			<plugin>
 				<groupId>org.sonatype.central</groupId>
 				<artifactId>central-publishing-maven-plugin</artifactId>
-				<version>0.9.0</version>
+				<version>0.11.0</version>
 				<extensions>true</extensions>
 				<configuration>
 					<publishingServerId>central</publishingServerId>
@@ -226,7 +226,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-source-plugin</artifactId>
-						<version>3.3.1</version>
+						<version>3.4.0</version>
 						<executions>
 							<execution>
 								<id>attach-sources</id>
